@@ -34,6 +34,12 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
 
+    // H2 Database
+    implementation("com.h2database:h2:2.2.224")
+
+    // Flyway for database migrations
+    implementation("org.flywaydb:flyway-core:9.22.3")
+
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
         intellijIdea(providers.gradleProperty("platformVersion"))
