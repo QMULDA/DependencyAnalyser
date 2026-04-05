@@ -19,6 +19,10 @@ kotlin {
     jvmToolchain(21)
 }
 
+tasks.withType<org.jetbrains.intellij.platform.gradle.tasks.InstrumentCodeTask> {
+    enabled = false
+}
+
 // Configure project's dependencies
 repositories {
     mavenCentral()
