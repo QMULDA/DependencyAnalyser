@@ -23,11 +23,6 @@ tasks.withType<org.jetbrains.intellij.platform.gradle.tasks.InstrumentCodeTask> 
     enabled = false
 }
 
-tasks.runIde {
-    jvmArgs("-Didea.log.console.level=ALL")
-    standardOutput = System.out
-}
-
 // Configure project's dependencies
 repositories {
     mavenCentral()
