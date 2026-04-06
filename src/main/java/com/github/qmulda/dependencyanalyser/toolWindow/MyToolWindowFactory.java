@@ -1,6 +1,6 @@
 package com.github.qmulda.dependencyanalyser.toolWindow;
 
-import com.github.qmulda.dependencyanalyser.services.DatabaseService;
+import com.github.qmulda.dependencyanalyser.dependencyhandler.DependencyHandler;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
@@ -13,9 +13,6 @@ import com.intellij.ui.content.ContentFactory;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.idea.maven.project.MavenProjectsManager;
-import org.jetbrains.idea.maven.project.MavenProject;
-import org.jetbrains.idea.maven.model.MavenArtifact;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -42,29 +39,14 @@ public class MyToolWindowFactory implements ToolWindowFactory {
     }
 
     public static class MyToolWindow {
-        private final Project project;
         private final JBPanel<?> content;
         private final JBLabel statusLabel;
         private static final Logger LOG = Logger.getInstance(MyToolWindow.class);
 
         public MyToolWindow(Project project) {
-            this.project = project;
             this.content = new JBPanel<>(new BorderLayout(10, 10));
             this.content.setBorder(JBUI.Borders.empty(10));
-
-            // Create header panel with title and scan button
-            //JBPanel<?> headerPanel = new JBPanel<>(new BorderLayout());
-            JBPanel<?> headerPanel = new JBPanel<>(new FlowLayout(FlowLayout.LEFT));
-            JBLabel titleLabel = new JBLabel("Dependency scan results");
-            titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
-            headerPanel.add(titleLabel);
-            JButton scanButton = new JButton("Scan Project");
-            //headerPanel.add(titleLabel, BorderLayout.WEST);
-
-            //scanButton.addActionListener(e -> performScan());
-            scanButton.addActionListener(e -> System.out.println("BUTTON CLICKED"));
-            headerPanel.add(scanButton);
-            //headerPanel.add(scanButton, BorderLayout.EAST);
+            JBPanel<?> headerPanel = getPanel(project, this.content);
 
             // Create table for dependencies
             JBTable dependencyTable = createDependencyTable();
@@ -80,6 +62,21 @@ public class MyToolWindowFactory implements ToolWindowFactory {
             this.content.add(statusLabel, BorderLayout.SOUTH);
         }
 
+        private static @NotNull JBPanel<?> getPanel(Project project, JBPanel<?> content) {
+            DependencyHandler handler = new DependencyHandler(project, content);
+
+            // Create header panel with title and scan button
+            JBPanel<?> headerPanel = new JBPanel<>(new BorderLayout());
+            JBLabel titleLabel = new JBLabel("Dependency scan results");
+            titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
+            headerPanel.add(titleLabel, BorderLayout.WEST);
+
+            JButton scanButton = new JButton("Scan Project");
+            scanButton.addActionListener(e -> handler.performScan());
+            headerPanel.add(scanButton, BorderLayout.EAST);
+            return headerPanel;
+        }
+
         private JBTable createDependencyTable() {
             String[] columnNames = {"Group ID", "Artifact ID", "Version", "Risk Tier", "Scope", "Transitive"};
             DefaultTableModel model = new DefaultTableModel(columnNames, 0) {
@@ -92,44 +89,6 @@ public class MyToolWindowFactory implements ToolWindowFactory {
             JBTable table = new JBTable(model);
             table.setAutoResizeMode(JBTable.AUTO_RESIZE_ALL_COLUMNS);
             return table;
-        }
-
-        private void performScan() {
-            try {
-                SwingUtilities.invokeLater(() -> {
-                    try {
-                        LOG.info("Starting dependency scan");
-                        DatabaseService dbService = DatabaseService.getInstance(project);
-                        // Implement Maven dependency extraction - Phase 1.4
-                        MavenProjectsManager manager = MavenProjectsManager.getInstance(project);
-                        LOG.info("Is Maven project: " + manager.isMavenizedProject());
-                        LOG.info("Number of Maven projects: " + manager.getProjects().size());
-                        for (MavenProject mp : manager.getProjects()) {
-                            LOG.info("Scanning Maven project: " + mp.getName());
-                            LOG.info("Number of dependencies: " + mp.getDependencies().size());
-                            for (MavenArtifact dep : mp.getDependencies()) {
-                                LOG.info("Dependency: " + dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion() + " scope: " + dep.getScope());
-                            }
-                        }
-                    } catch (Exception e) {
-                        LOG.error("Error during scan", e);
-                        JOptionPane.showMessageDialog(
-                                content,
-                                "Error scanning project: " + e.getMessage(),
-                                "Scan Error",
-                                JOptionPane.ERROR_MESSAGE
-                        );
-                    }
-                });
-            } catch (Exception e) {
-                LOG.error("Failed to start scan", e);
-                JOptionPane.showMessageDialog(
-                        content,
-                        "Failed to start scan: " + e.getMessage(),
-                        "Scan Error",
-                        JOptionPane.ERROR_MESSAGE
-                );
-            }
         }
 
         public JBPanel<?> getContent() {
