@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.changelog) // Gradle Changelog Plugin
     alias(libs.plugins.qodana) // Gradle Qodana Plugin
     alias(libs.plugins.kover) // Gradle Kover Plugin
+    id("com.google.protobuf") version "0.9.4" // Protocol Buffers compiler
 }
 
 group = providers.gradleProperty("pluginGroup").get()
@@ -43,6 +44,12 @@ dependencies {
 
     // Flyway for database migrations
     implementation("org.flywaydb:flyway-core:9.22.3")
+
+    // gRPC dependencies for deps.dev API integration
+    runtimeOnly("io.grpc:grpc-netty-shaded:1.63.0")
+    implementation("io.grpc:grpc-protobuf:1.63.0")
+    implementation("io.grpc:grpc-stub:1.63.0")
+    implementation("javax.annotation:javax.annotation-api:1.3.2")
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
@@ -167,3 +174,15 @@ intellijPlatformTesting {
         }
     }
 }
+
+// Configure protobuf compiler for gRPC code generation
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:3.25.3" }
+    plugins {
+        id("grpc") { artifact = "io.grpc:protoc-gen-grpc-java:1.63.0" }
+    }
+    generateProtoTasks {
+        all().forEach { it.plugins { id("grpc") } }
+    }
+}
+
