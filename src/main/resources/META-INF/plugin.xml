@@ -10,6 +10,8 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.qmulda.dependencyanalyser.toolWindow.MyToolWindowFactory" id="DependencyAnalyser"/>
+        <toolWindow factoryClass="com.github.qmulda.dependencyanalyser.toolWindow.MyToolWindowFactory"
+                    id="DependencyAnalyser"
+                    anchor="right"/>
     </extensions>
 </idea-plugin>
