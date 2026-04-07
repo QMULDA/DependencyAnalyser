@@ -4,7 +4,6 @@ import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("java") // Java support
-    alias(libs.plugins.kotlin) // Kotlin support
     alias(libs.plugins.intelliJPlatform) // IntelliJ Platform Gradle Plugin
     alias(libs.plugins.changelog) // Gradle Changelog Plugin
     alias(libs.plugins.qodana) // Gradle Qodana Plugin
@@ -16,8 +15,10 @@ group = providers.gradleProperty("pluginGroup").get()
 version = providers.gradleProperty("pluginVersion").get()
 
 // Set the JVM language level used to build the project.
-kotlin {
-    jvmToolchain(21)
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 tasks.withType<org.jetbrains.intellij.platform.gradle.tasks.InstrumentCodeTask> {
@@ -50,6 +51,8 @@ dependencies {
     implementation("io.grpc:grpc-protobuf:1.63.0")
     implementation("io.grpc:grpc-stub:1.63.0")
     implementation("javax.annotation:javax.annotation-api:1.3.2")
+    // Provides google/api/annotations.proto imported by deps.dev api.proto
+    implementation("com.google.api.grpc:proto-google-common-protos:2.29.0")
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
@@ -179,10 +182,10 @@ intellijPlatformTesting {
 protobuf {
     protoc { artifact = "com.google.protobuf:protoc:3.25.3" }
     plugins {
-        id("grpc") { artifact = "io.grpc:protoc-gen-grpc-java:1.63.0" }
+        create("grpc") { artifact = "io.grpc:protoc-gen-grpc-java:1.63.0" }
     }
     generateProtoTasks {
-        all().forEach { it.plugins { id("grpc") } }
+        all().forEach { it.plugins { create("grpc") } }
     }
 }
 
