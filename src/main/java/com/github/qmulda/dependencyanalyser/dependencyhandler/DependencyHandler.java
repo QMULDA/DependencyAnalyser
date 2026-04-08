@@ -9,16 +9,19 @@ import org.jetbrains.idea.maven.project.MavenProject;
 import org.jetbrains.idea.maven.project.MavenProjectsManager;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.Component;
 import java.util.List;
 
 public class DependencyHandler {
     private final Project project;
     private final Component parent;
+    private final DefaultTableModel tableModel;
 
-    public DependencyHandler(Project project, Component parent) {
+    public DependencyHandler(Project project, Component parent, DefaultTableModel tableModel) {
         this.project = project;
         this.parent = parent;
+        this.tableModel = tableModel;
     }
 
     public void performScan() {
@@ -27,6 +30,7 @@ public class DependencyHandler {
             SwingUtilities.invokeLater(() -> {
                 try {
                     System.out.println("Starting dependency scan");
+                    tableModel.setRowCount(0); // Clear previous results
                     DatabaseService dbService = DatabaseService.getInstance(project);
                     // Implement Maven dependency extraction - Phase 1.4
                     MavenProjectsManager manager = MavenProjectsManager.getInstance(project);
@@ -82,8 +86,20 @@ public class DependencyHandler {
             return;
         }
         for (Dependencies.Node node : graph.getNodesList()) {
-            System.out.println("  [" + node.getRelation().name() + "] "
-                    + node.getVersionKey().getName() + ":" + node.getVersionKey().getVersion());
+            String relation = node.getRelation().name();
+            String name = node.getVersionKey().getName();
+            String version = node.getVersionKey().getVersion();
+            System.out.println("  [" + relation + "] " + name + ":" + version);
+
+            // Split "groupId:artifactId" back into separate columns
+            String[] parts = name.split(":", 2);
+            String groupId = parts.length == 2 ? parts[0] : name;
+            String artifactId = parts.length == 2 ? parts[1] : "";
+            String scope = relation.equals("DIRECT") ? dep.getScope() : "transitive";
+
+            SwingUtilities.invokeLater(() ->
+                tableModel.addRow(new Object[]{groupId, artifactId, version, "", scope, relation})
+            );
         }
     }
 

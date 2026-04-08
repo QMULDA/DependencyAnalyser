@@ -46,10 +46,14 @@ public class MyToolWindowFactory implements ToolWindowFactory {
         public MyToolWindow(Project project) {
             this.content = new JBPanel<>(new BorderLayout(10, 10));
             this.content.setBorder(JBUI.Borders.empty(10));
-            JBPanel<?> headerPanel = getPanel(project, this.content);
+
+            // Create table model first so it can be passed to the handler
+            DefaultTableModel tableModel = createDependencyTableModel();
+            JBPanel<?> headerPanel = getPanel(project, this.content, tableModel);
 
             // Create table for dependencies
-            JBTable dependencyTable = createDependencyTable();
+            JBTable dependencyTable = new JBTable(tableModel);
+            dependencyTable.setAutoResizeMode(JBTable.AUTO_RESIZE_ALL_COLUMNS);
             JBScrollPane scrollPane = new JBScrollPane(dependencyTable);
             scrollPane.setPreferredSize(new Dimension(600, 400));
 
@@ -62,8 +66,8 @@ public class MyToolWindowFactory implements ToolWindowFactory {
             this.content.add(statusLabel, BorderLayout.SOUTH);
         }
 
-        private static @NotNull JBPanel<?> getPanel(Project project, JBPanel<?> content) {
-            DependencyHandler handler = new DependencyHandler(project, content);
+        private static @NotNull JBPanel<?> getPanel(Project project, JBPanel<?> content, DefaultTableModel tableModel) {
+            DependencyHandler handler = new DependencyHandler(project, content, tableModel);
 
             // Create header panel with title and scan button
             JBPanel<?> headerPanel = new JBPanel<>(new BorderLayout());
@@ -77,18 +81,14 @@ public class MyToolWindowFactory implements ToolWindowFactory {
             return headerPanel;
         }
 
-        private JBTable createDependencyTable() {
+        private DefaultTableModel createDependencyTableModel() {
             String[] columnNames = {"Group ID", "Artifact ID", "Version", "Risk Tier", "Scope", "Transitive"};
-            DefaultTableModel model = new DefaultTableModel(columnNames, 0) {
+            return new DefaultTableModel(columnNames, 0) {
                 @Override
                 public boolean isCellEditable(int row, int column) {
-                    return false; // Make table read-only
+                    return false;
                 }
             };
-
-            JBTable table = new JBTable(model);
-            table.setAutoResizeMode(JBTable.AUTO_RESIZE_ALL_COLUMNS);
-            return table;
         }
 
         public JBPanel<?> getContent() {
