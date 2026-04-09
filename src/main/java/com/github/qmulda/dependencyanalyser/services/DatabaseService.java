@@ -4,6 +4,8 @@ import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 
+import org.flywaydb.core.Flyway;
+
 import java.io.File;
 import java.sql.*;
 import java.util.*;
@@ -50,14 +52,12 @@ public final class DatabaseService {
                 }
             }
 
-            // Load H2 driver
-            Class.forName("org.h2.Driver");
-            logger.info("H2 driver loaded successfully");
-
-            // Test connection
-            Connection connection = getConnection();
-            connection.close();
-            logger.info("Database connection test successful");
+            Flyway flyway = Flyway.configure()
+                    .dataSource(DB_URL, DB_USER, DB_PASSWORD)
+                    .locations("classpath:db/migration")
+                    .load();
+            flyway.migrate();
+            logger.info("Flyway migration completed successfully");
         } catch (Exception e) {
             logger.error("Failed to initialize database", e);
             throw new RuntimeException("Database initialization failed", e);
