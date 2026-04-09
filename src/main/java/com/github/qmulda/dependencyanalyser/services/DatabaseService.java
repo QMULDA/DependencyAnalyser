@@ -52,8 +52,13 @@ public final class DatabaseService {
                 }
             }
 
+            org.h2.jdbcx.JdbcDataSource ds = new org.h2.jdbcx.JdbcDataSource();
+            ds.setURL(DB_URL);
+            ds.setUser(DB_USER);
+            ds.setPassword(DB_PASSWORD);
+
             Flyway flyway = Flyway.configure()
-                    .dataSource(DB_URL, DB_USER, DB_PASSWORD)
+                    .dataSource(ds)
                     .locations("classpath:db/migration")
                     .load();
             flyway.migrate();
