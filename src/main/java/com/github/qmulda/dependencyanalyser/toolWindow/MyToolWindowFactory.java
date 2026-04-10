@@ -1,6 +1,7 @@
 package com.github.qmulda.dependencyanalyser.toolWindow;
 
 import com.github.qmulda.dependencyanalyser.dependencyhandler.DependencyHandler;
+import com.github.qmulda.dependencyanalyser.services.SupabaseExporter;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
@@ -75,9 +76,17 @@ public class MyToolWindowFactory implements ToolWindowFactory {
             titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
             headerPanel.add(titleLabel, BorderLayout.WEST);
 
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
             JButton scanButton = new JButton("Scan Project");
             scanButton.addActionListener(e -> handler.performScan());
-            headerPanel.add(scanButton, BorderLayout.EAST);
+            buttonPanel.add(scanButton);
+
+            JButton exportButton = new JButton("Export to Cloud");
+            SupabaseExporter exporter = new SupabaseExporter(project);
+            exportButton.addActionListener(e -> exporter.exportAll(content));
+            buttonPanel.add(exportButton);
+
+            headerPanel.add(buttonPanel, BorderLayout.EAST);
             return headerPanel;
         }
 
