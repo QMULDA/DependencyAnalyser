@@ -1,14 +1,21 @@
 package com.github.qmulda.dependencyanalyser.services;
 
-import com.intellij.openapi.components.Service;
-import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.project.Project;
+import java.io.File;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.flywaydb.core.Flyway;
 
-import java.io.File;
-import java.sql.*;
-import java.util.*;
+import com.intellij.openapi.components.Service;
+import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.project.Project;
 
 /**
  * ProjectService for managing H2 database connections.
@@ -27,6 +34,7 @@ public final class DatabaseService {
     private static final Logger logger = Logger.getInstance(DatabaseService.class);
     
     private final Project project;
+    private org.h2.jdbcx.JdbcDataSource dataSource;
 
     public DatabaseService(Project project) {
         this.project = project;
@@ -52,13 +60,13 @@ public final class DatabaseService {
                 }
             }
 
-            org.h2.jdbcx.JdbcDataSource ds = new org.h2.jdbcx.JdbcDataSource();
-            ds.setURL(DB_URL);
-            ds.setUser(DB_USER);
-            ds.setPassword(DB_PASSWORD);
+            dataSource = new org.h2.jdbcx.JdbcDataSource();
+            dataSource.setURL(DB_URL);
+            dataSource.setUser(DB_USER);
+            dataSource.setPassword(DB_PASSWORD);
 
             Flyway flyway = Flyway.configure()
-                    .dataSource(ds)
+                    .dataSource(dataSource)
                     .locations("classpath:db/migration")
                     .load();
             flyway.migrate();
@@ -76,7 +84,7 @@ public final class DatabaseService {
      * @throws SQLException if connection cannot be established
      */
     public Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+        return dataSource.getConnection();
     }
 
     /**
