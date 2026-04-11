@@ -5,23 +5,20 @@ import com.intellij.openapi.project.Project;
 
 import javax.swing.*;
 import java.awt.Component;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class SupabaseExporter {
 
-    private static final String[] TABLE_ORDER = {"project", "library", "scan", "version", "dependency"};
+    // FK-safe export order: project and library have no FKs; scan→project;
+    // version→library; dependency→scan+version.
+    private static final String[] TABLE_ORDER = {"project", "scan", "library", "version", "dependency"};
 
     private final Project project;
 
@@ -32,16 +29,11 @@ public class SupabaseExporter {
     public void exportAll(Component parent) {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
-                Map<String, String> env = loadEnv();
-                String supabaseUrl = env.getOrDefault("SUPABASE_URL", System.getenv("SUPABASE_URL"));
-                String serviceRoleKey = env.getOrDefault("SUPABASE_SERVICE_ROLE_KEY", System.getenv("SUPABASE_SERVICE_ROLE_KEY"));
+                String supabaseUrl = SupabaseConfig.SUPABASE_URL;
+                String secretKey = SupabaseConfig.SECRET_KEY;
 
-                if (supabaseUrl == null || supabaseUrl.isBlank()) {
-                    showError(parent, "SUPABASE_URL not found in ~/.dependencyanalyser/.env or environment variables.");
-                    return;
-                }
-                if (serviceRoleKey == null || serviceRoleKey.isBlank()) {
-                    showError(parent, "SUPABASE_SERVICE_ROLE_KEY not found in ~/.dependencyanalyser/.env or environment variables.");
+                if (supabaseUrl.startsWith("YOUR_") || secretKey.startsWith("YOUR_")) {
+                    showError(parent, "Supabase credentials are not configured.\nFill in SupabaseConfig.java with your Project URL and Secret key.");
                     return;
                 }
 
@@ -60,10 +52,10 @@ public class SupabaseExporter {
 
                     HttpRequest request = HttpRequest.newBuilder()
                             .uri(URI.create(supabaseUrl + "/rest/v1/" + table))
-                            .header("apikey", serviceRoleKey)
-                            .header("Authorization", "Bearer " + serviceRoleKey)
+                            .header("apikey", secretKey)
+                            .header("Authorization", "Bearer " + secretKey)
                             .header("Content-Type", "application/json")
-                            .header("Prefer", "return=minimal,resolution=merge-duplicates")
+                            .header("Prefer", "return=minimal")
                             .POST(HttpRequest.BodyPublishers.ofString(json))
                             .build();
 
@@ -88,37 +80,6 @@ public class SupabaseExporter {
         });
     }
 
-    /**
-     * Loads KEY=VALUE pairs from ~/.dependencyanalyser/.env.
-     * Lines starting with '#' and blank lines are ignored.
-     */
-    private Map<String, String> loadEnv() {
-        Map<String, String> env = new HashMap<>();
-        File envFile = new File(System.getProperty("user.home"), ".dependencyanalyser/.env");
-        if (!envFile.exists()) {
-            return env;
-        }
-        try (BufferedReader reader = new BufferedReader(new FileReader(envFile))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                line = line.strip();
-                if (line.isEmpty() || line.startsWith("#")) continue;
-                int eq = line.indexOf('=');
-                if (eq > 0) {
-                    String key = line.substring(0, eq).strip();
-                    String value = line.substring(eq + 1).strip();
-                    env.put(key, value);
-                }
-            }
-        } catch (IOException e) {
-            System.out.println("Could not read .env file: " + e.getMessage());
-        }
-        return env;
-    }
-
-    /**
-     * Serialises a list of rows (each a Map of column→value) to a JSON array string.
-     */
     private String toJsonArray(List<Map<String, Object>> rows) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < rows.size(); i++) {
