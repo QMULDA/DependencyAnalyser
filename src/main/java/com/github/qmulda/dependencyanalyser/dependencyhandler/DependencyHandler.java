@@ -61,6 +61,7 @@ public class DependencyHandler {
                     JOptionPane.ERROR_MESSAGE
             );
         }
+        System.out.println("Scan finished");
     }
 
     public void getTransitiveDependencies(List<MavenArtifact> directDeps) {

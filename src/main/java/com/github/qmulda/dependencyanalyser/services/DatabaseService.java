@@ -88,13 +88,19 @@ public final class DatabaseService {
     public List<Map<String, Object>> executeQuery(String query) {
         List<Map<String, Object>> results = new ArrayList<>();
         try {
+            System.out.println("Attempting to get connection for query: " + query);
             Connection connection = getConnection();
+            System.out.println("Got connection");
             try (connection) {
                 Statement statement = connection.createStatement();
+                System.out.println("Created statement");
                 try (statement) {
                     ResultSet resultSet = statement.executeQuery(query);
+                    System.out.println("Executed query");
                     ResultSetMetaData metadata = resultSet.getMetaData();
+                    System.out.println("Got metadata");
                     int columnCount = metadata.getColumnCount();
+                    System.out.println("Column count: " + columnCount);
 
                     while (resultSet.next()) {
                         Map<String, Object> row = new HashMap<>();
@@ -105,6 +111,7 @@ public final class DatabaseService {
                         }
                         results.add(row);
                     }
+                    System.out.println("Processed result set, rows fetched: " + results.size());
                 }
             }
         } catch (Exception e) {
