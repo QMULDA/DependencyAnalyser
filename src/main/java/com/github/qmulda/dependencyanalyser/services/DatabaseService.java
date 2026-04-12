@@ -142,15 +142,14 @@ public final class DatabaseService {
      * Execute a SQL update/insert/delete statement.
      *
      * @param sql The SQL statement to execute
-     * @return Number of rows affected
      */
-    public int executeUpdate(String sql) {
+    public void executeUpdate(String sql) {
         try {
             Connection connection = getConnection();
             try (connection) {
                 Statement statement = connection.createStatement();
                 try (statement) {
-                    return statement.executeUpdate(sql);
+                    statement.executeUpdate(sql);
                 }
             }
         } catch (Exception e) {

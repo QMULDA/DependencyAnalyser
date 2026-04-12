@@ -31,7 +31,6 @@ public class DependencyHandler {
                 try {
                     System.out.println("Starting dependency scan");
                     tableModel.setRowCount(0); // Clear previous results
-                    DatabaseService dbService = DatabaseService.getInstance(project);
                     // Implement Maven dependency extraction - Phase 1.4
                     MavenProjectsManager manager = MavenProjectsManager.getInstance(project);
                     System.out.println("Is Maven project: " + manager.isMavenizedProject());
@@ -78,6 +77,7 @@ public class DependencyHandler {
     }
 
     private void fetchTransitivesForDep(DepsDevClient client, MavenArtifact dep) {
+        DatabaseService dbService = DatabaseService.getInstance(project);
         String coords = dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion();
         System.out.println("Dependency: " + coords + " scope: " + dep.getScope());
         System.out.println("Fetching transitive deps for: " + coords);
@@ -97,6 +97,9 @@ public class DependencyHandler {
             String groupId = parts.length == 2 ? parts[0] : name;
             String artifactId = parts.length == 2 ? parts[1] : "";
             String scope = relation.equals("DIRECT") ? dep.getScope() : "transitive";
+
+            String sql = "INSERT INTO dependency (group_id, artifact_id, version, scope, relation) VALUES (?, ?, ?, ?, ?)";
+            dbService.executeUpdate(sql);
 
             SwingUtilities.invokeLater(() ->
                 tableModel.addRow(new Object[]{groupId, artifactId, version, "", scope, relation})
