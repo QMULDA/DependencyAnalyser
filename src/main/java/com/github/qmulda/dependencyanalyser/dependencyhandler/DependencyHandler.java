@@ -1,7 +1,8 @@
 package com.github.qmulda.dependencyanalyser.dependencyhandler;
 
-import com.github.qmulda.dependencyanalyser.services.DatabaseService;
+import com.github.qmulda.dependencyanalyser.services.ScanRepository;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import deps_dev.v3.Api.Dependencies;
 import org.jetbrains.idea.maven.model.MavenArtifact;
@@ -11,9 +12,12 @@ import org.jetbrains.idea.maven.project.MavenProjectsManager;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.Component;
+import java.sql.SQLException;
 import java.util.List;
 
 public class DependencyHandler {
+    private static final Logger logger = Logger.getInstance(DependencyHandler.class);
+
     private final Project project;
     private final Component parent;
     private final DefaultTableModel tableModel;
@@ -67,19 +71,27 @@ public class DependencyHandler {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             DepsDevClient client = new DepsDevClient();
             try {
+                ScanRepository repo = ScanRepository.getInstance(project);
+                String basePath = project.getBasePath() != null ? project.getBasePath() : "(unknown)";
+                int projectId = repo.upsertProject(project.getName(), basePath);
+                int scanId    = repo.insertScan(projectId);
+
                 for (MavenArtifact dep : directDeps) {
-                    fetchTransitivesForDep(client, dep);
+                    fetchTransitivesForDep(client, dep, scanId, repo);
                 }
+
+                repo.touchProjectLastScanned(projectId);
+            } catch (SQLException e) {
+                logger.error("Database error during scan", e);
             } finally {
                 client.shutdown();
             }
         });
     }
 
-    private void fetchTransitivesForDep(DepsDevClient client, MavenArtifact dep) {
-        DatabaseService dbService = DatabaseService.getInstance(project);
+    private void fetchTransitivesForDep(DepsDevClient client, MavenArtifact dep,
+                                        int scanId, ScanRepository repo) {
         String coords = dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion();
-        System.out.println("Dependency: " + coords + " scope: " + dep.getScope());
         System.out.println("Fetching transitive deps for: " + coords);
         Dependencies graph = client.getDependencies(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
         if (graph == null) {
@@ -87,24 +99,25 @@ public class DependencyHandler {
             return;
         }
         for (Dependencies.Node node : graph.getNodesList()) {
-            String relation = node.getRelation().name();
-            String name = node.getVersionKey().getName();
-            String version = node.getVersionKey().getVersion();
-            System.out.println("  [" + relation + "] " + name + ":" + version);
-
-            // Split "groupId:artifactId" back into separate columns
-            String[] parts = name.split(":", 2);
-            String groupId = parts.length == 2 ? parts[0] : name;
+            String relation   = node.getRelation().name();
+            String name       = node.getVersionKey().getName();
+            String version    = node.getVersionKey().getVersion();
+            String[] parts    = name.split(":", 2);
+            String groupId    = parts.length == 2 ? parts[0] : name;
             String artifactId = parts.length == 2 ? parts[1] : "";
-            String scope = relation.equals("DIRECT") ? dep.getScope() : "transitive";
+            String scope      = "DIRECT".equals(relation) ? dep.getScope() : "transitive";
 
-            String sql = "INSERT INTO dependency (group_id, artifact_id, version, scope, relation) VALUES (?, ?, ?, ?, ?)";
-            dbService.executeUpdate(sql);
+            try {
+                int libraryId = repo.upsertLibrary(groupId, artifactId);
+                int versionId = repo.upsertVersion(libraryId, version);
+                repo.insertDependency(scanId, versionId, scope, relation);
+            } catch (SQLException e) {
+                logger.error("Failed to persist dependency: " + name + ":" + version, e);
+            }
 
             SwingUtilities.invokeLater(() ->
                 tableModel.addRow(new Object[]{groupId, artifactId, version, "", scope, relation})
             );
         }
     }
-
 }

@@ -2,6 +2,7 @@ package com.github.qmulda.dependencyanalyser.services;
 
 import java.io.File;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -136,6 +137,39 @@ public final class DatabaseService {
             System.out.println("Failed to execute query: " + e);
         }
         return results;
+    }
+
+    /**
+     * Execute a parameterized SQL update/insert/delete statement using a PreparedStatement.
+     *
+     * @param sql    The SQL statement with ? placeholders
+     * @param params Values to bind to the placeholders in order
+     */
+    public void executeUpdate(String sql, Object... params) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Execute a parameterized INSERT statement and return the generated auto-increment key.
+     *
+     * @param sql    The INSERT statement with ? placeholders
+     * @param params Values to bind to the placeholders in order
+     * @return The generated primary key value
+     */
+    public int executeInsertGetKey(String sql, Object... params) throws SQLException {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+            ps.executeUpdate();
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                if (keys.next()) return keys.getInt(1);
+                throw new SQLException("Insert succeeded but no generated key returned");
+            }
+        }
     }
 
     /**
