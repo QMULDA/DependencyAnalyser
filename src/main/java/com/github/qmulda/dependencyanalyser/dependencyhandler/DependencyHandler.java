@@ -1,6 +1,6 @@
 package com.github.qmulda.dependencyanalyser.dependencyhandler;
 
-import com.github.qmulda.dependencyanalyser.services.ScanRepository;
+import com.github.qmulda.dependencyanalyser.services.SqlQueryUtils;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
@@ -71,7 +71,7 @@ public class DependencyHandler {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             DepsDevClient client = new DepsDevClient();
             try {
-                ScanRepository repo = ScanRepository.getInstance(project);
+                SqlQueryUtils repo = SqlQueryUtils.getInstance(project);
                 String basePath = project.getBasePath() != null ? project.getBasePath() : "(unknown)";
                 int projectId = repo.upsertProject(project.getName(), basePath);
                 int scanId    = repo.insertScan(projectId);
@@ -80,7 +80,7 @@ public class DependencyHandler {
                     fetchTransitivesForDep(client, dep, scanId, repo);
                 }
 
-                repo.touchProjectLastScanned(projectId);
+                repo.updateLastScanned(projectId);
             } catch (SQLException e) {
                 logger.error("Database error during scan", e);
             } finally {
@@ -90,7 +90,7 @@ public class DependencyHandler {
     }
 
     private void fetchTransitivesForDep(DepsDevClient client, MavenArtifact dep,
-                                        int scanId, ScanRepository repo) {
+                                        int scanId, SqlQueryUtils repo) {
         String coords = dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion();
         System.out.println("Fetching transitive deps for: " + coords);
         Dependencies graph = client.getDependencies(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());

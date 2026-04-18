@@ -96,7 +96,7 @@ public class SupabaseExporter {
         for (Map.Entry<String, Object> entry : row.entrySet()) {
             if (!first) sb.append(",");
             first = false;
-            sb.append("\"").append(escapeJson(entry.getKey())).append("\":");
+            sb.append("\"").append(escapeJson(entry.getKey().toLowerCase())).append("\":");
             sb.append(toJsonValue(entry.getValue()));
         }
         sb.append("}");

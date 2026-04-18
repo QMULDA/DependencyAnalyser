@@ -9,16 +9,16 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 @Service(Service.Level.PROJECT)
-public final class ScanRepository {
+public final class SqlQueryUtils {
 
     private final DatabaseService db;
 
-    public ScanRepository(Project project) {
+    public SqlQueryUtils(Project project) {
         this.db = DatabaseService.getInstance(project);
     }
 
-    public static ScanRepository getInstance(Project project) {
-        return project.getService(ScanRepository.class);
+    public static SqlQueryUtils getInstance(Project project) {
+        return project.getService(SqlQueryUtils.class);
     }
 
     /** Returns the existing project_id for the given path, or inserts a new row and returns its generated key. */
@@ -35,7 +35,7 @@ public final class ScanRepository {
     }
 
     /** Updates last_scanned to the current timestamp. Call this after the scan loop completes. */
-    public void touchProjectLastScanned(int projectId) throws SQLException {
+    public void updateLastScanned(int projectId) throws SQLException {
         db.executeUpdate(
                 "UPDATE project SET last_scanned = CURRENT_TIMESTAMP WHERE project_id = ?", projectId);
     }
