@@ -24,28 +24,30 @@ public final class SqlQueryUtils {
         return project.getService(SqlQueryUtils.class);
     }
 
-    /** Returns the existing project_id for the given path, or inserts a new row and returns its generated key. */
-    public int upsertProject(String name, String path) throws SQLException {
+    /** Returns the existing project_id for the given projectId, or inserts a new row and returns it. */
+    public String upsertProject(String projectId, String name, String path) throws SQLException {
         System.out.println("Attempting to get connection to upsert project...");
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT project_id FROM project WHERE path = ?")) {
-            ps.setString(1, path);
+                     "SELECT project_id FROM project WHERE project_id = ?")) {
+            ps.setString(1, projectId);
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return rs.getInt("project_id");
+                if (rs.next()) return rs.getString("project_id");
             }
         }
-        return db.executeInsertGetKey("INSERT INTO project (name, path) VALUES (?, ?)", name, path);
+        db.executeUpdate(
+                "INSERT INTO project (project_id, name, path) VALUES (?, ?, ?)", projectId, name, path);
+        return projectId;
     }
 
     /** Updates last_scanned to the current timestamp. Call this after the scan loop completes. */
-    public void updateLastScanned(int projectId) throws SQLException {
+    public void updateLastScanned(String projectId) throws SQLException {
         db.executeUpdate(
                 "UPDATE project SET last_scanned = CURRENT_TIMESTAMP WHERE project_id = ?", projectId);
     }
 
     /** Inserts a new scan row and returns its generated scan_id. scanned_at is set by the DB default. */
-    public int insertScanIntoH2(int projectId) throws SQLException {
+    public int insertScanIntoH2(String projectId) throws SQLException {
         return db.executeInsertGetKey("INSERT INTO scan (project_id) VALUES (?)", projectId);
     }
 

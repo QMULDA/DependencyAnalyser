@@ -12,7 +12,11 @@ import org.jetbrains.idea.maven.project.MavenProjectsManager;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.Component;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class DependencyHandler {
@@ -34,19 +38,40 @@ public class DependencyHandler {
             SwingUtilities.invokeLater(() -> {
                 try {
                     System.out.println("Starting dependency scan");
-                    tableModel.setRowCount(0); // Clear previous results
-                    // Implement Maven dependency extraction - Phase 1.4
+                    tableModel.setRowCount(0);
+
                     MavenProjectsManager manager = MavenProjectsManager.getInstance(project);
                     System.out.println("Is Maven project: " + manager.isMavenizedProject());
-                    System.out.println("Number of Maven projects: " + manager.getProjects().size());
-                    for (MavenProject mp : manager.getProjects()) {
-                        System.out.println("Scanning Maven project: " + mp.getName());
-                        List<MavenArtifact> directDeps = mp.getDependencies();
-                        System.out.println("Number of dependencies: " + directDeps.size());
-                        getTransitiveDependencies(directDeps);
+
+                    List<MavenProject> roots = manager.getRootProjects();
+                    if (roots.isEmpty()) {
+                        JOptionPane.showMessageDialog(parent,
+                                "No Maven root project found.", "Scan Error", JOptionPane.ERROR_MESSAGE);
+                        return;
                     }
+
+                    MavenProject root = roots.get(0);
+                    String groupId    = root.getMavenId().getGroupId();
+                    String artifactId = root.getMavenId().getArtifactId();
+                    String projectId   = sha256Hex(groupId + ":" + artifactId);
+                    String name        = root.getName();
+                    if (name == null || name.isBlank()) name = artifactId;
+                    String path        = root.getDirectory();
+
+                    System.out.println("project_id = " + projectId);
+                    System.out.println("name       = " + name);
+                    System.out.println("path       = " + path);
+
+                    List<MavenArtifact> allDeps = new ArrayList<>();
+                    for (MavenProject mp : manager.getProjects()) {
+                        System.out.println("Collecting deps from module: " + mp.getName());
+                        allDeps.addAll(mp.getDependencies());
+                    }
+                    System.out.println("Total dependencies collected: " + allDeps.size());
+
+                    getTransitiveDependencies(allDeps, projectId, name, path);
                 } catch (Exception e) {
-                    System.out.println("Error during scan:\n" +  e);
+                    System.out.println("Error during scan:\n" + e);
                     JOptionPane.showMessageDialog(
                             parent,
                             "Error scanning project: " + e.getMessage(),
@@ -56,7 +81,7 @@ public class DependencyHandler {
                 }
             });
         } catch (Exception e) {
-            System.out.println("Failed to start scan:\n" +  e);
+            System.out.println("Failed to start scan:\n" + e);
             JOptionPane.showMessageDialog(
                     parent,
                     "Failed to start scan: " + e.getMessage(),
@@ -67,13 +92,13 @@ public class DependencyHandler {
         System.out.println("Scan finished");
     }
 
-    public void getTransitiveDependencies(List<MavenArtifact> directDeps) {
+    public void getTransitiveDependencies(List<MavenArtifact> directDeps,
+                                          String projectId, String name, String path) {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             DepsDevClient client = new DepsDevClient();
             try {
                 SqlQueryUtils utils = SqlQueryUtils.getInstance(project);
-                String basePath = project.getBasePath() != null ? project.getBasePath() : "(unknown)";
-                int projectId = utils.upsertProject(project.getName(), basePath);
+                utils.upsertProject(projectId, name, path);
                 int scanId    = utils.insertScanIntoH2(projectId);
 
                 for (MavenArtifact dep : directDeps) {
@@ -116,8 +141,20 @@ public class DependencyHandler {
             }
 
             SwingUtilities.invokeLater(() ->
-                tableModel.addRow(new Object[]{groupId, artifactId, version, "", scope, relation})
+                tableModel.addRow(new Object[]{groupId, artifactId, version, scope, relation})
             );
+        }
+    }
+
+    private static String sha256Hex(String input) {
+        try {
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            byte[] hash = sha.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hash) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
         }
     }
 }

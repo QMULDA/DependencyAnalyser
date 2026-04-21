@@ -91,7 +91,7 @@ public class MyToolWindowFactory implements ToolWindowFactory {
         }
 
         private DefaultTableModel createDependencyTableModel() {
-            String[] columnNames = {"Group ID", "Artifact ID", "Version", "Risk Tier", "Scope", "Transitive"};
+            String[] columnNames = {"Group ID", "Artifact ID", "Version", "Scope", "Transitive"};
             return new DefaultTableModel(columnNames, 0) {
                 @Override
                 public boolean isCellEditable(int row, int column) {
