@@ -83,7 +83,6 @@ public final class DatabaseService {
      */
     public Connection getConnection() {
         try {
-            System.out.println("Attempting to get connection...");
             return dataSource.getConnection();
         } catch (Exception e) {
             logger.error("Failed to get connection: " + e.getMessage());
@@ -109,6 +108,7 @@ public final class DatabaseService {
     public List<Map<String, Object>> executeQuery(String query) throws SQLException {
         List<Map<String, Object>> results = new ArrayList<>();
 
+        System.out.println("Attempting to get connection to execute query...");
         Connection connection = getConnection();
         System.out.println("Got connection.");
 
@@ -146,6 +146,7 @@ public final class DatabaseService {
      * @param params Values to bind to the placeholders in order
      */
     public void executeUpdate(String sql, Object... params) throws SQLException {
+        System.out.println("Attempting to get connection to execute update...");
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
@@ -161,6 +162,7 @@ public final class DatabaseService {
      * @return The generated primary key value
      */
     public int executeInsertGetKey(String sql, Object... params) throws SQLException {
+        System.out.println("Attempting to get connection to execute insert...");
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
@@ -179,6 +181,7 @@ public final class DatabaseService {
      */
     public void executeUpdate(String sql) {
         try {
+            System.out.println("Attempting to get connection to execute update...");
             Connection connection = getConnection();
             try (connection) {
                 Statement statement = connection.createStatement();

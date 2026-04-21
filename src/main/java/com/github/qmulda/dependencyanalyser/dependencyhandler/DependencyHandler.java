@@ -71,16 +71,16 @@ public class DependencyHandler {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             DepsDevClient client = new DepsDevClient();
             try {
-                SqlQueryUtils repo = SqlQueryUtils.getInstance(project);
+                SqlQueryUtils utils = SqlQueryUtils.getInstance(project);
                 String basePath = project.getBasePath() != null ? project.getBasePath() : "(unknown)";
-                int projectId = repo.upsertProject(project.getName(), basePath);
-                int scanId    = repo.insertScan(projectId);
+                int projectId = utils.upsertProject(project.getName(), basePath);
+                int scanId    = utils.insertScanIntoH2(projectId);
 
                 for (MavenArtifact dep : directDeps) {
-                    fetchTransitivesForDep(client, dep, scanId, repo);
+                    fetchTransitivesForDep(client, dep, scanId, utils);
                 }
 
-                repo.updateLastScanned(projectId);
+                utils.updateLastScanned(projectId);
             } catch (SQLException e) {
                 logger.error("Database error during scan", e);
             } finally {
@@ -105,7 +105,7 @@ public class DependencyHandler {
             String[] parts    = name.split(":", 2);
             String groupId    = parts.length == 2 ? parts[0] : name;
             String artifactId = parts.length == 2 ? parts[1] : "";
-            String scope      = "DIRECT".equals(relation) ? dep.getScope() : "transitive";
+            String scope      = "DIRECT".equals(relation) ? dep.getScope() : dep.getScope() + " (transitively)";
 
             try {
                 int libraryId = repo.upsertLibrary(groupId, artifactId);

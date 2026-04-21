@@ -8,6 +8,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+/**
+ * Collection of SQL statements to deal with H2 db. Used with DatabaseService.
+ */
 @Service(Service.Level.PROJECT)
 public final class SqlQueryUtils {
 
@@ -23,6 +26,7 @@ public final class SqlQueryUtils {
 
     /** Returns the existing project_id for the given path, or inserts a new row and returns its generated key. */
     public int upsertProject(String name, String path) throws SQLException {
+        System.out.println("Attempting to get connection to upsert project...");
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT project_id FROM project WHERE path = ?")) {
@@ -41,12 +45,13 @@ public final class SqlQueryUtils {
     }
 
     /** Inserts a new scan row and returns its generated scan_id. scanned_at is set by the DB default. */
-    public int insertScan(int projectId) throws SQLException {
+    public int insertScanIntoH2(int projectId) throws SQLException {
         return db.executeInsertGetKey("INSERT INTO scan (project_id) VALUES (?)", projectId);
     }
 
     /** Returns the existing library_id for (groupId, artifactId), or inserts a new row and returns its generated key. */
     public int upsertLibrary(String groupId, String artifactId) throws SQLException {
+        System.out.println("Attempting to get connection to upsert library...");
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT library_id FROM library WHERE group_id = ? AND artifact_id = ?")) {
@@ -62,6 +67,7 @@ public final class SqlQueryUtils {
 
     /** Returns the existing version_id for (libraryId, versionString), or inserts a new row and returns its generated key. risk_tier is left NULL until semver scoring is implemented. */
     public int upsertVersion(int libraryId, String versionString) throws SQLException {
+        System.out.println("Attempting to get connection to upsert version...");
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT version_id FROM version WHERE library_id = ? AND version_string = ?")) {
