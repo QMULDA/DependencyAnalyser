@@ -41,7 +41,11 @@ public class SupabaseExporter {
                 HttpClient httpClient = HttpClient.newHttpClient();
 
                 for (String table : TABLE_ORDER) {
-                    List<Map<String, Object>> rows = dbService.executeQuery("SELECT * FROM " + table);
+                    // Never export `path` - local filesystem data must not leave the machine
+                    String selectSql = "project".equals(table)
+                            ? "SELECT project_id, name, last_scanned FROM project"
+                            : "SELECT * FROM " + table;
+                    List<Map<String, Object>> rows = dbService.executeQuery(selectSql);
                     if (rows.isEmpty()) {
                         System.out.println("Skipping empty table: " + table);
                         continue;
@@ -50,19 +54,24 @@ public class SupabaseExporter {
                     String json = toJsonArray(rows);
                     System.out.println("Exporting table '" + table + "' (" + rows.size() + " rows)");
 
+                    // Use merge-duplicates on project so re-exports update the existing row
+                    String prefer = "project".equals(table)
+                            ? "resolution=merge-duplicates,return=minimal"
+                            : "return=minimal";
+
                     HttpRequest request = HttpRequest.newBuilder()
                             .uri(URI.create(supabaseUrl + "/rest/v1/" + table))
                             .header("apikey", secretKey)
                             .header("Authorization", "Bearer " + secretKey)
                             .header("Content-Type", "application/json")
-                            .header("Prefer", "return=minimal")
+                            .header("Prefer", prefer)
                             .POST(HttpRequest.BodyPublishers.ofString(json))
                             .build();
 
                     HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                     System.out.println("  -> " + table + ": HTTP " + response.statusCode());
 
-                    if (response.statusCode() != 200 && response.statusCode() != 201) {
+                    if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 204) {
                         String body = response.body();
                         showError(parent, "Export failed for table '" + table + "': HTTP " + response.statusCode() + "\n" + body);
                         return;
