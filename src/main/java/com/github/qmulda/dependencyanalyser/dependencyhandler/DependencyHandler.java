@@ -4,6 +4,7 @@ import com.github.qmulda.dependencyanalyser.services.SqlQueryUtils;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
+import com.intellij.ui.components.JBLabel;
 import deps_dev.v3.Api.Dependencies;
 import org.jetbrains.idea.maven.model.MavenArtifact;
 import org.jetbrains.idea.maven.project.MavenProject;
@@ -25,11 +26,13 @@ public class DependencyHandler {
     private final Project project;
     private final Component parent;
     private final DefaultTableModel tableModel;
+    private final JBLabel statusLabel;
 
-    public DependencyHandler(Project project, Component parent, DefaultTableModel tableModel) {
+    public DependencyHandler(Project project, Component parent, DefaultTableModel tableModel, JBLabel statusLabel) {
         this.project = project;
         this.parent = parent;
         this.tableModel = tableModel;
+        this.statusLabel = statusLabel;
     }
 
     public void performScan() {
@@ -69,6 +72,14 @@ public class DependencyHandler {
                     }
                     System.out.println("Total dependencies collected: " + allDeps.size());
 
+                    for (MavenArtifact dep : allDeps) {
+                        tableModel.addRow(new Object[]{
+                                dep.getGroupId(), dep.getArtifactId(), dep.getVersion(),
+                                dep.getScope(), "DIRECT"
+                        });
+                    }
+                    statusLabel.setText("Found " + allDeps.size() + " direct deps. Fetching transitives...");
+
                     getTransitiveDependencies(allDeps, projectId, name, path);
                 } catch (Exception e) {
                     System.out.println("Error during scan:\n" + e);
@@ -101,13 +112,24 @@ public class DependencyHandler {
                 utils.upsertProject(projectId, name, path);
                 int scanId    = utils.insertScanIntoH2(projectId);
 
+                int completed = 0;
                 for (MavenArtifact dep : directDeps) {
                     fetchTransitivesForDep(client, dep, scanId, utils);
+                    completed++;
+                    final int done = completed;
+                    final int total = directDeps.size();
+                    SwingUtilities.invokeLater(() ->
+                            statusLabel.setText("Enriching transitives: " + done + "/" + total + "...")
+                    );
                 }
 
                 utils.updateLastScanned(projectId);
+                SwingUtilities.invokeLater(() ->
+                        statusLabel.setText("Scan complete. " + tableModel.getRowCount() + " dependencies found.")
+                );
             } catch (SQLException e) {
                 logger.error("Database error during scan", e);
+                SwingUtilities.invokeLater(() -> statusLabel.setText("Scan failed: " + e.getMessage()));
             } finally {
                 client.shutdown();
             }

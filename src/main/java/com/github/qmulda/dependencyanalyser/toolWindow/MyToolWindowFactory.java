@@ -50,7 +50,8 @@ public class MyToolWindowFactory implements ToolWindowFactory {
 
             // Create table model first so it can be passed to the handler
             DefaultTableModel tableModel = createDependencyTableModel();
-            JBPanel<?> headerPanel = getPanel(project, this.content, tableModel);
+            this.statusLabel = new JBLabel("Ready to scan...");
+            JBPanel<?> headerPanel = getPanel(project, this.content, tableModel, this.statusLabel);
 
             // Create table for dependencies
             JBTable dependencyTable = new JBTable(tableModel);
@@ -63,12 +64,11 @@ public class MyToolWindowFactory implements ToolWindowFactory {
             this.content.add(scrollPane, BorderLayout.CENTER);
 
             // Add status label at bottom
-            this.statusLabel = new JBLabel("Ready to scan...");
             this.content.add(statusLabel, BorderLayout.SOUTH);
         }
 
-        private static @NotNull JBPanel<?> getPanel(Project project, JBPanel<?> content, DefaultTableModel tableModel) {
-            DependencyHandler handler = new DependencyHandler(project, content, tableModel);
+        private static @NotNull JBPanel<?> getPanel(Project project, JBPanel<?> content, DefaultTableModel tableModel, JBLabel statusLabel) {
+            DependencyHandler handler = new DependencyHandler(project, content, tableModel, statusLabel);
 
             // Create header panel with title and scan button
             JBPanel<?> headerPanel = new JBPanel<>(new BorderLayout());
