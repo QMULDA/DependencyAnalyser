@@ -4,5 +4,6 @@
 .intellijPlatform
 .kotlin
 .qodana
+bin
 build
 src/**/SupabaseConfig.java
