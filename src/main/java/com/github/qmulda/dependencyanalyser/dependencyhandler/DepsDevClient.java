@@ -7,6 +7,7 @@ import deps_dev.v3.Api.VersionKey;
 import deps_dev.v3.Api.System;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 
 import java.util.HashMap;
@@ -27,7 +28,7 @@ public class DepsDevClient {
                 .forAddress(HOST, PORT)
                 .useTransportSecurity()
                 .build();
-        this.stub = InsightsGrpc.newBlockingStub(channel).withWaitForReady();
+        this.stub = InsightsGrpc.newBlockingStub(channel);
     }
 
     /**
@@ -46,24 +47,40 @@ public class DepsDevClient {
             return cache.get(cacheKey);
         }
 
-        try {
-            VersionKey vk = VersionKey.newBuilder()
-                    .setSystem(System.MAVEN)
-                    .setName(groupId + ":" + artifactId)
-                    .setVersion(version)
-                    .build();
+        VersionKey vk = VersionKey.newBuilder()
+                .setSystem(System.MAVEN)
+                .setName(groupId + ":" + artifactId)
+                .setVersion(version)
+                .build();
+        GetDependenciesRequest request = GetDependenciesRequest.newBuilder()
+                .setVersionKey(vk)
+                .build();
 
-            GetDependenciesRequest request = GetDependenciesRequest.newBuilder()
-                    .setVersionKey(vk)
-                    .build();
-
-            Dependencies dependencies = stub.getDependencies(request);
-            cache.put(cacheKey, dependencies);
-            return dependencies;
-        } catch (StatusRuntimeException e) {
-            java.lang.System.out.println("deps.dev gRPC error for " + cacheKey + ": " + e.getStatus());
-            return null;
+        int attempts = 4;
+        long backoffMs = 500;
+        while (attempts-- > 0) {
+            try {
+                try { Thread.sleep(150); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); return null; }
+                Dependencies dependencies = stub.getDependencies(request);
+                cache.put(cacheKey, dependencies);
+                return dependencies;
+            } catch (StatusRuntimeException e) {
+                Status.Code code = e.getStatus().getCode();
+                boolean isRateLimited = code == Status.Code.UNAVAILABLE || code == Status.Code.RESOURCE_EXHAUSTED;
+                if (isRateLimited && attempts > 0) {
+                    java.lang.System.out.println("deps.dev " + code + " for " + cacheKey + ", retrying in " + backoffMs + "ms (" + attempts + " left)...");
+                    try { Thread.sleep(backoffMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); return null; }
+                    backoffMs *= 2;
+                } else if (isRateLimited) {
+                    java.lang.System.out.println("deps.dev rate limited for " + cacheKey + " after retries, giving up.");
+                    return null;
+                } else {
+                    java.lang.System.out.println("deps.dev error for " + cacheKey + ": " + e.getStatus());
+                    return null;
+                }
+            }
         }
+        return null;
     }
 
     public void shutdown() {
