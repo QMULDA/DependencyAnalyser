@@ -106,6 +106,11 @@ public class DependencyHandler {
     public void getTransitiveDependencies(List<MavenArtifact> directDeps,
                                           String projectId, String name, String path) {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            System.out.println("directDeps in background thread: " + directDeps.size());
+            for (MavenArtifact d : directDeps) {
+                System.out.println("  -> " + d.getGroupId() + ":" + d.getArtifactId() + ":" + d.getVersion());
+            }
+            System.out.println(">>> executeOnPooledThread STARTED, deps count: " + directDeps.size());
             DepsDevClient client = new DepsDevClient();
             try {
                 SqlQueryUtils utils = SqlQueryUtils.getInstance(project);
@@ -113,11 +118,12 @@ public class DependencyHandler {
                 int scanId    = utils.insertScanIntoH2(projectId);
 
                 int completed = 0;
+                final int total = directDeps.size();
+
                 for (MavenArtifact dep : directDeps) {
                     fetchTransitivesForDep(client, dep, scanId, utils);
                     completed++;
                     final int done = completed;
-                    final int total = directDeps.size();
                     SwingUtilities.invokeLater(() ->
                             statusLabel.setText("Enriching transitives: " + done + "/" + total + "...")
                     );

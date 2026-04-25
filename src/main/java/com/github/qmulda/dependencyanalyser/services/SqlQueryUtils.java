@@ -33,6 +33,9 @@ public final class SqlQueryUtils {
             ps.setString(1, projectId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) return rs.getString("project_id");
+            } catch (Exception e){
+                System.out.println("Error upserting project: " + e.getMessage());
+                throw e;
             }
         }
         db.executeUpdate(

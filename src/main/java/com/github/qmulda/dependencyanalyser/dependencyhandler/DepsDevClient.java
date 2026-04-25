@@ -27,7 +27,7 @@ public class DepsDevClient {
                 .forAddress(HOST, PORT)
                 .useTransportSecurity()
                 .build();
-        this.stub = InsightsGrpc.newBlockingStub(channel);
+        this.stub = InsightsGrpc.newBlockingStub(channel).withWaitForReady();
     }
 
     /**
