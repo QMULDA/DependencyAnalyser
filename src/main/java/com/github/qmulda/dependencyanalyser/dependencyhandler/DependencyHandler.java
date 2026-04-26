@@ -1,12 +1,13 @@
 package com.github.qmulda.dependencyanalyser.dependencyhandler;
 
+import com.github.qmulda.dependencyanalyser.risk.RiskTierCalculator;
+import com.github.qmulda.dependencyanalyser.scan.ScannedDependency;
 import com.github.qmulda.dependencyanalyser.services.SqlQueryUtils;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.components.JBLabel;
 import deps_dev.v3.Api.Dependencies;
-import org.jetbrains.idea.maven.model.MavenArtifact;
 import org.jetbrains.idea.maven.project.MavenProject;
 import org.jetbrains.idea.maven.project.MavenProjectsManager;
 
@@ -18,6 +19,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class DependencyHandler {
@@ -28,7 +30,8 @@ public class DependencyHandler {
     private final DefaultTableModel tableModel;
     private final JBLabel statusLabel;
 
-    public DependencyHandler(Project project, Component parent, DefaultTableModel tableModel, JBLabel statusLabel) {
+    public DependencyHandler(Project project, Component parent, DefaultTableModel tableModel,
+                             JBLabel statusLabel) {
         this.project = project;
         this.parent = parent;
         this.tableModel = tableModel;
@@ -65,113 +68,123 @@ public class DependencyHandler {
                     System.out.println("name       = " + name);
                     System.out.println("path       = " + path);
 
-                    List<MavenArtifact> allDeps = new ArrayList<>();
+                    // Collect direct deps from all Maven modules as ScannedDependency objects
+                    List<ScannedDependency> directDeps = new ArrayList<>();
                     for (MavenProject mp : manager.getProjects()) {
                         System.out.println("Collecting deps from module: " + mp.getName());
-                        allDeps.addAll(mp.getDependencies());
+                        for (var dep : mp.getDependencies()) {
+                            directDeps.add(new ScannedDependency(
+                                    dep.getGroupId(), dep.getArtifactId(), dep.getVersion(),
+                                    dep.getScope(), "DIRECT"
+                            ));
+                        }
                     }
-                    System.out.println("Total dependencies collected: " + allDeps.size());
+                    System.out.println("Total direct dependencies collected: " + directDeps.size());
 
-                    for (MavenArtifact dep : allDeps) {
+                    // Show direct deps in the table immediately
+                    for (ScannedDependency dep : directDeps) {
                         tableModel.addRow(new Object[]{
-                                dep.getGroupId(), dep.getArtifactId(), dep.getVersion(),
-                                dep.getScope(), "DIRECT"
+                                dep.groupId, dep.artifactId, dep.version, dep.scope, dep.relation
                         });
                     }
-                    statusLabel.setText("Found " + allDeps.size() + " direct deps. Fetching transitives...");
+                    statusLabel.setText("Found " + directDeps.size() + " direct deps. Fetching transitives...");
 
-                    getTransitiveDependencies(allDeps, projectId, name, path);
+                    startBackgroundEnrichment(directDeps, projectId, name, path);
+
                 } catch (Exception e) {
                     System.out.println("Error during scan:\n" + e);
-                    JOptionPane.showMessageDialog(
-                            parent,
+                    JOptionPane.showMessageDialog(parent,
                             "Error scanning project: " + e.getMessage(),
-                            "Scan Error",
-                            JOptionPane.ERROR_MESSAGE
-                    );
+                            "Scan Error", JOptionPane.ERROR_MESSAGE);
                 }
             });
         } catch (Exception e) {
             System.out.println("Failed to start scan:\n" + e);
-            JOptionPane.showMessageDialog(
-                    parent,
+            JOptionPane.showMessageDialog(parent,
                     "Failed to start scan: " + e.getMessage(),
-                    "Scan Error",
-                    JOptionPane.ERROR_MESSAGE
-            );
+                    "Scan Error", JOptionPane.ERROR_MESSAGE);
         }
-        System.out.println("Scan finished");
     }
 
-    public void getTransitiveDependencies(List<MavenArtifact> directDeps,
-                                          String projectId, String name, String path) {
+    private void startBackgroundEnrichment(List<ScannedDependency> directDeps,
+                                           String projectId, String name, String path) {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
-            System.out.println("directDeps in background thread: " + directDeps.size());
-            for (MavenArtifact d : directDeps) {
-                System.out.println("  -> " + d.getGroupId() + ":" + d.getArtifactId() + ":" + d.getVersion());
-            }
-            System.out.println(">>> executeOnPooledThread STARTED, deps count: " + directDeps.size());
+            System.out.println(">>> Background enrichment started, direct deps: " + directDeps.size());
             DepsDevClient client = new DepsDevClient();
             try {
                 SqlQueryUtils utils = SqlQueryUtils.getInstance(project);
-                utils.upsertProject(projectId, name, path);
-                int scanId    = utils.insertScanIntoH2(projectId);
 
+                // allDeps starts with the direct deps; transitives are appended below
+                List<ScannedDependency> allDeps = new ArrayList<>(directDeps);
                 int completed = 0;
                 final int total = directDeps.size();
 
-                for (MavenArtifact dep : directDeps) {
-                    fetchTransitivesForDep(client, dep, scanId, utils);
+                for (ScannedDependency dep : directDeps) {
+                    List<ScannedDependency> transitives = fetchTransitivesForDep(client, dep);
+                    allDeps.addAll(transitives);
+
+                    // Progressive table update so the user sees rows as they arrive
+                    final List<ScannedDependency> batch = Collections.unmodifiableList(
+                            new ArrayList<>(transitives));
+                    SwingUtilities.invokeLater(() -> {
+                        for (ScannedDependency t : batch) {
+                            tableModel.addRow(new Object[]{
+                                    t.groupId, t.artifactId, t.version, t.scope, t.relation
+                            });
+                        }
+                    });
+
                     completed++;
                     final int done = completed;
                     SwingUtilities.invokeLater(() ->
-                            statusLabel.setText("Enriching transitives: " + done + "/" + total + "...")
-                    );
+                            statusLabel.setText("Enriching transitives: " + done + "/" + total + "..."));
                 }
 
-                utils.updateLastScanned(projectId);
+                // Compute risk tiers on the full dep list (pure computation, no UI involvement)
+                RiskTierCalculator.assignTiers(allDeps);
+
+                // Persist the entire scan in one transaction
+                utils.persistScan(projectId, name, path, allDeps);
+
                 SwingUtilities.invokeLater(() ->
-                        statusLabel.setText("Scan complete. " + tableModel.getRowCount() + " dependencies found.")
-                );
+                        statusLabel.setText("Scan complete. " + allDeps.size() + " dependencies found."));
+
             } catch (SQLException e) {
                 logger.error("Database error during scan", e);
-                SwingUtilities.invokeLater(() -> statusLabel.setText("Scan failed: " + e.getMessage()));
+                SwingUtilities.invokeLater(() ->
+                        statusLabel.setText("Scan failed: " + e.getMessage()));
             } finally {
                 client.shutdown();
             }
         });
     }
 
-    private void fetchTransitivesForDep(DepsDevClient client, MavenArtifact dep,
-                                        int scanId, SqlQueryUtils repo) {
-        String coords = dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion();
+    private List<ScannedDependency> fetchTransitivesForDep(DepsDevClient client,
+                                                            ScannedDependency dep) {
+        String coords = dep.groupId + ":" + dep.artifactId + ":" + dep.version;
         System.out.println("Fetching transitive deps for: " + coords);
-        Dependencies graph = client.getDependencies(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+
+        Dependencies graph = client.getDependencies(dep.groupId, dep.artifactId, dep.version);
         if (graph == null) {
             System.out.println("  Not found in deps.dev, skipping: " + coords);
-            return;
+            return Collections.emptyList();
         }
+
+        List<ScannedDependency> result = new ArrayList<>();
         for (Dependencies.Node node : graph.getNodesList()) {
-            String relation   = node.getRelation().name();
-            String name       = node.getVersionKey().getName();
-            String version    = node.getVersionKey().getVersion();
-            String[] parts    = name.split(":", 2);
-            String groupId    = parts.length == 2 ? parts[0] : name;
+            // Skip SELF — this node is the direct dep we already have from Maven API
+            if ("SELF".equals(node.getRelation().name())) continue;
+
+            String nodeName = node.getVersionKey().getName();
+            String version  = node.getVersionKey().getVersion();
+            String[] parts  = nodeName.split(":", 2);
+            String groupId    = parts.length == 2 ? parts[0] : nodeName;
             String artifactId = parts.length == 2 ? parts[1] : "";
-            String scope      = "DIRECT".equals(relation) ? dep.getScope() : dep.getScope() + " (transitively)";
 
-            try {
-                int libraryId = repo.upsertLibrary(groupId, artifactId);
-                int versionId = repo.upsertVersion(libraryId, version);
-                repo.insertDependency(scanId, versionId, scope, relation);
-            } catch (SQLException e) {
-                logger.error("Failed to persist dependency: " + name + ":" + version, e);
-            }
-
-            SwingUtilities.invokeLater(() ->
-                tableModel.addRow(new Object[]{groupId, artifactId, version, scope, relation})
-            );
+            // All non-SELF nodes from deps.dev are indirect from the project's perspective
+            result.add(new ScannedDependency(groupId, artifactId, version, "transitive", "INDIRECT"));
         }
+        return result;
     }
 
     private static String sha256Hex(String input) {
