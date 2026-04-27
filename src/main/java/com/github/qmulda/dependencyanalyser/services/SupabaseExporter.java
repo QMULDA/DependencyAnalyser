@@ -16,8 +16,8 @@ import java.util.Map;
 
 public class SupabaseExporter {
 
-    // FK-safe export order: project and library have no FKs; scan→project;
-    // version→library; dependency→scan+version.
+    // FK-safe export order: project and library have no FKs; scan -> project;
+    // version -> library; dependency -> scan+version.
     private static final String[] TABLE_ORDER = {"project", "scan", "library", "version", "dependency"};
 
     private final Project project;
@@ -74,6 +74,7 @@ public class SupabaseExporter {
                     if (response.statusCode() != 200 && response.statusCode() != 201 && response.statusCode() != 204) {
                         String body = response.body();
                         showError(parent, "Export failed for table '" + table + "': HTTP " + response.statusCode() + "\n" + body);
+                        //TODO implement rollback?
                         return;
                     }
                 }

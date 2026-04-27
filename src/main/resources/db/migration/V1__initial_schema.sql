@@ -23,7 +23,8 @@ CREATE TABLE version (
     version_id     INT          AUTO_INCREMENT PRIMARY KEY,
     library_id     INT          NOT NULL,
     version_string VARCHAR(100) NOT NULL,
-    risk_tier      VARCHAR(10)  CHECK (risk_tier IN ('LOW', 'MEDIUM', 'HIGH')),
+    risk_tier      VARCHAR(10),
+    CONSTRAINT risk_tier_valid CHECK (risk_tier IN ('NONE', 'LOW', 'MEDIUM', 'HIGH')),
     CONSTRAINT fk_version_library FOREIGN KEY (library_id) REFERENCES library (library_id),
     CONSTRAINT uq_version UNIQUE (library_id, version_string)
 );
@@ -33,7 +34,8 @@ CREATE TABLE dependency (
     scan_id       INT        NOT NULL,
     version_id    INT        NOT NULL,
     scope         VARCHAR(50),
-    relation      VARCHAR(10) NOT NULL CHECK (relation IN ('SELF', 'DIRECT', 'INDIRECT')),
+    relation      VARCHAR(10) NOT NULL,
+    CONSTRAINT relation_valid CHECK (relation IN ('SELF', 'DIRECT', 'INDIRECT')),
     CONSTRAINT fk_dependency_scan    FOREIGN KEY (scan_id)    REFERENCES scan    (scan_id),
     CONSTRAINT fk_dependency_version FOREIGN KEY (version_id) REFERENCES version (version_id)
 );

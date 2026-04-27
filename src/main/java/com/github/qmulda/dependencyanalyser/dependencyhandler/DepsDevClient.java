@@ -56,7 +56,7 @@ public class DepsDevClient {
                 .setVersionKey(vk)
                 .build();
 
-        int attempts = 4;
+        int attempts = 6;
         long backoffMs = 500;
         while (attempts-- > 0) {
             try {
