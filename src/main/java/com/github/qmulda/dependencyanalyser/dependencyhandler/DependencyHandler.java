@@ -7,6 +7,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.components.JBLabel;
+import deps_dev.v3.Api.Version;
 import deps_dev.v3.Api.Dependencies;
 import org.jetbrains.idea.maven.project.MavenProject;
 import org.jetbrains.idea.maven.project.MavenProjectsManager;
@@ -68,14 +69,25 @@ public class DependencyHandler {
                     System.out.println("name       = " + name);
                     System.out.println("path       = " + path);
 
+                    DepsDevClient client = new DepsDevClient();
+
                     // Collect direct deps from all Maven modules as ScannedDependency objects
                     List<ScannedDependency> directDeps = new ArrayList<>();
                     for (MavenProject mp : manager.getProjects()) {
                         System.out.println("Collecting deps from module: " + mp.getName());
                         for (var dep : mp.getDependencies()) {
+                            Version CveForDep = client.getCve(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+
+                            List<String> advisoryIds = CveForDep.getAdvisoryKeysList().stream()
+                                    .map(adv -> adv.getId())
+                                    .toList();
+                            String coords = dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion();
+
+                            System.out.println("CVEs for " + coords + ": " + CveForDep.getAdvisoryKeysList());
+
                             directDeps.add(new ScannedDependency(
                                     dep.getGroupId(), dep.getArtifactId(), dep.getVersion(),
-                                    dep.getScope(), "DIRECT"
+                                    dep.getScope(), "DIRECT", advisoryIds
                             ));
                         }
                     }
@@ -181,8 +193,15 @@ public class DependencyHandler {
             String groupId    = parts.length == 2 ? parts[0] : nodeName;
             String artifactId = parts.length == 2 ? parts[1] : "";
 
+            Version CveForDep = client.getCve(dep.groupId, dep.artifactId, dep.version);
+
+            List<String> advisoryIds = CveForDep.getAdvisoryKeysList().stream()
+                    .map(adv -> adv.getId())
+                    .toList();
+            System.out.println("CVEs for " + coords + ": " + CveForDep.getAdvisoryKeysList());
+
             // All non-SELF nodes from deps.dev are indirect from the project's perspective
-            result.add(new ScannedDependency(groupId, artifactId, version, "transitive", "INDIRECT"));
+            result.add(new ScannedDependency(groupId, artifactId, version, "transitive", "INDIRECT", advisoryIds));
         }
         return result;
     }
