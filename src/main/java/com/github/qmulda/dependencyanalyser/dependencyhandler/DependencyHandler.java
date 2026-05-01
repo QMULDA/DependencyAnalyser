@@ -7,7 +7,6 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.components.JBLabel;
-import deps_dev.v3.Api.Version;
 import deps_dev.v3.Api.Dependencies;
 import org.jetbrains.idea.maven.project.MavenProject;
 import org.jetbrains.idea.maven.project.MavenProjectsManager;
@@ -45,6 +44,7 @@ public class DependencyHandler {
             SwingUtilities.invokeLater(() -> {
                 try {
                     System.out.println("Starting dependency scan");
+                    statusLabel.setText("Getting direct deps...");
                     tableModel.setRowCount(0);
 
                     MavenProjectsManager manager = MavenProjectsManager.getInstance(project);
@@ -58,12 +58,12 @@ public class DependencyHandler {
                     }
 
                     MavenProject root = roots.get(0);
-                    String groupId    = root.getMavenId().getGroupId();
+                    String groupId = root.getMavenId().getGroupId();
                     String artifactId = root.getMavenId().getArtifactId();
-                    String projectId   = sha256Hex(groupId + ":" + artifactId);
-                    String name        = root.getName();
+                    String projectId = sha256Hex(groupId + ":" + artifactId);
+                    String name = root.getName();
                     if (name == null || name.isBlank()) name = artifactId;
-                    String path        = root.getDirectory();
+                    String path = root.getDirectory();
 
                     System.out.println("project_id = " + projectId);
                     System.out.println("name       = " + name);
@@ -76,14 +76,12 @@ public class DependencyHandler {
                     for (MavenProject mp : manager.getProjects()) {
                         System.out.println("Collecting deps from module: " + mp.getName());
                         for (var dep : mp.getDependencies()) {
-                            Version CveForDep = client.getCve(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+                            List<String> advisoryIds = client.getPackageMetaData(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
 
-                            List<String> advisoryIds = CveForDep.getAdvisoryKeysList().stream()
-                                    .map(adv -> adv.getId())
-                                    .toList();
                             String coords = dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion();
 
-                            System.out.println("CVEs for " + coords + ": " + CveForDep.getAdvisoryKeysList());
+                            List<String> CvesForDep = client.getCve(advisoryIds);
+                            System.out.println("CVEs for " + coords + ": " + CvesForDep);
 
                             directDeps.add(new ScannedDependency(
                                     dep.getGroupId(), dep.getArtifactId(), dep.getVersion(),
@@ -172,7 +170,7 @@ public class DependencyHandler {
     }
 
     private List<ScannedDependency> fetchTransitivesForDep(DepsDevClient client,
-                                                            ScannedDependency dep) {
+                                                           ScannedDependency dep) {
         String coords = dep.groupId + ":" + dep.artifactId + ":" + dep.version;
         System.out.println("Fetching transitive deps for: " + coords);
 
@@ -188,17 +186,18 @@ public class DependencyHandler {
             if ("SELF".equals(node.getRelation().name())) continue;
 
             String nodeName = node.getVersionKey().getName();
-            String version  = node.getVersionKey().getVersion();
-            String[] parts  = nodeName.split(":", 2);
-            String groupId    = parts.length == 2 ? parts[0] : nodeName;
+            String version = node.getVersionKey().getVersion();
+            String[] parts = nodeName.split(":", 2);
+            String groupId = parts.length == 2 ? parts[0] : nodeName;
             String artifactId = parts.length == 2 ? parts[1] : "";
 
-            Version CveForDep = client.getCve(dep.groupId, dep.artifactId, dep.version);
-
-            List<String> advisoryIds = CveForDep.getAdvisoryKeysList().stream()
-                    .map(adv -> adv.getId())
-                    .toList();
-            System.out.println("CVEs for " + coords + ": " + CveForDep.getAdvisoryKeysList());
+            List<String> advisoryIds = client.getPackageMetaData(dep.groupId, dep.artifactId, dep.version);
+            if (advisoryIds != null) {
+                List<String> CvesForDep = client.getCve(advisoryIds);
+                System.out.println("CVEs for " + coords + ": " + CvesForDep);
+            } else{
+                System.out.println("No CVEs for " + coords);
+            }
 
             // All non-SELF nodes from deps.dev are indirect from the project's perspective
             result.add(new ScannedDependency(groupId, artifactId, version, "transitive", "INDIRECT", advisoryIds));

@@ -7,12 +7,17 @@ import deps_dev.v3.Api.GetVersionRequest;
 import deps_dev.v3.Api.VersionKey;
 import deps_dev.v3.Api.Version;
 import deps_dev.v3.Api.System;
+import deps_dev.v3.Api.Advisory;
+import deps_dev.v3.Api.AdvisoryKey;
+import deps_dev.v3.Api.GetAdvisoryRequest;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -24,7 +29,8 @@ public class DepsDevClient {
     private final ManagedChannel channel;
     private final InsightsGrpc.InsightsBlockingStub stub;
     private final Map<String, Dependencies> dependencyCache = new HashMap<>();
-    private final Map<String, Version> versionCache = new HashMap<>();
+    private final Map<String, List<String>> versionCache = new HashMap<>();
+    private final Map<String, List<String>> CveCache = new HashMap<>();
 
     public DepsDevClient() {
         this.channel = ManagedChannelBuilder
@@ -107,7 +113,7 @@ public class DepsDevClient {
      * @param versionString    Maven version string
      * @return Version, or null if not found / on error
      */
-    public Version getCve(String groupId, String artifactId, String versionString) {
+    public List<String> getPackageMetaData(String groupId, String artifactId, String versionString) {
 
         String cacheKey = groupId + ":" + artifactId + ":" + versionString;
         if (versionCache.containsKey(cacheKey)) {
@@ -134,8 +140,12 @@ public class DepsDevClient {
                     return null;
                 }
                 Version version = stub.getVersion(request);
-                versionCache.put(cacheKey, version);
-                return version;
+
+                List<String> advisoryIds = version.getAdvisoryKeysList().stream()
+                        .map(AdvisoryKey::getId)
+                        .toList();
+                versionCache.put(cacheKey, advisoryIds);
+                return advisoryIds;
             } catch (StatusRuntimeException e) {
                 Status.Code code = e.getStatus().getCode();
                 boolean isRateLimited = code == Status.Code.UNAVAILABLE || code == Status.Code.RESOURCE_EXHAUSTED;
@@ -158,6 +168,69 @@ public class DepsDevClient {
             }
         }
         return null;
+    }
+
+    /**
+     * Returns returns information about CVE
+     *
+     * @param advisoryKeys    Maven group ID
+     * @return advisoryKeys.id, or null if not found / on error
+     */
+    public List<String> getCve(List<String> advisoryKeys) {
+        List<String> CvesForDep = new ArrayList<>(List.of());
+        for(String advisoryKey : advisoryKeys) {
+            if (CveCache.containsKey(advisoryKey)) {
+                return CveCache.get(advisoryKey);
+            }
+
+            AdvisoryKey ak = AdvisoryKey.newBuilder()
+                    .setId(advisoryKey)
+                    .build();
+
+            GetAdvisoryRequest request = GetAdvisoryRequest.newBuilder()
+                    .setAdvisoryKey(ak)
+                    .build();
+
+            int attempts = 6;
+            long backoffMs = 500;
+            while (attempts-- > 0) {
+                try {
+                    try {
+                        Thread.sleep(150);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                    Advisory cve = stub.getAdvisory(request);
+                    CveCache.put(advisoryKey, cve.getAliasesList());
+                    if (cve.getAliasesList().isEmpty()) {
+                        CvesForDep.add(advisoryKey);
+                    } else {
+                    CvesForDep.add(cve.getAliases(0));
+                    }
+                } catch (StatusRuntimeException e) {
+                    Status.Code code = e.getStatus().getCode();
+                    boolean isRateLimited = code == Status.Code.UNAVAILABLE || code == Status.Code.RESOURCE_EXHAUSTED;
+                    if (isRateLimited && attempts > 0) {
+                        java.lang.System.out.println("deps.dev " + code + " for " + advisoryKeys + ", retrying in " + backoffMs + "ms (" + attempts + " left)...");
+                        try {
+                            Thread.sleep(backoffMs);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            return null;
+                        }
+                        backoffMs *= 2;
+                    } else if (isRateLimited) {
+                        java.lang.System.out.println("deps.dev rate limited for " + advisoryKeys + " after retries, giving up.");
+                        return null;
+                    } else {
+                        java.lang.System.out.println("deps.dev error for " + advisoryKeys + ": " + e.getStatus());
+                        return null;
+                    }
+                }
+            }
+        }
+        return CvesForDep;
     }
 
     public void shutdown() {
