@@ -14,6 +14,7 @@ import org.jetbrains.idea.maven.project.MavenProjectsManager;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.Component;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -40,11 +41,11 @@ public class DependencyHandler {
 
     public void performScan() {
         System.out.println("performScan() CALLED");
+        statusLabel.setText("Getting direct deps...");
         try {
             SwingUtilities.invokeLater(() -> {
                 try {
                     System.out.println("Starting dependency scan");
-                    statusLabel.setText("Getting direct deps...");
                     tableModel.setRowCount(0);
 
                     MavenProjectsManager manager = MavenProjectsManager.getInstance(project);
@@ -83,9 +84,11 @@ public class DependencyHandler {
                             List<String> CvesForDep = client.getCve(advisoryIds);
                             System.out.println("CVEs for " + coords + ": " + CvesForDep);
 
+                            boolean isDeprecated = client.isDeprecated(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+
                             directDeps.add(new ScannedDependency(
                                     dep.getGroupId(), dep.getArtifactId(), dep.getVersion(),
-                                    dep.getScope(), "DIRECT", advisoryIds
+                                    dep.getScope(), "DIRECT", advisoryIds, isDeprecated
                             ));
                         }
                     }
@@ -163,6 +166,10 @@ public class DependencyHandler {
                 logger.error("Database error during scan", e);
                 SwingUtilities.invokeLater(() ->
                         statusLabel.setText("Scan failed: " + e.getMessage()));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             } finally {
                 client.shutdown();
             }
@@ -170,7 +177,7 @@ public class DependencyHandler {
     }
 
     private List<ScannedDependency> fetchTransitivesForDep(DepsDevClient client,
-                                                           ScannedDependency dep) {
+                                                           ScannedDependency dep) throws IOException, InterruptedException {
         String coords = dep.groupId + ":" + dep.artifactId + ":" + dep.version;
         System.out.println("Fetching transitive deps for: " + coords);
 
@@ -199,8 +206,10 @@ public class DependencyHandler {
                 System.out.println("No CVEs for " + coords);
             }
 
+            boolean isDeprecated = client.isDeprecated(dep.groupId, dep.artifactId, dep.version);
+
             // All non-SELF nodes from deps.dev are indirect from the project's perspective
-            result.add(new ScannedDependency(groupId, artifactId, version, "transitive", "INDIRECT", advisoryIds));
+            result.add(new ScannedDependency(groupId, artifactId, version, "transitive", "INDIRECT", advisoryIds, isDeprecated));
         }
         return result;
     }
