@@ -13,5 +13,6 @@
         <toolWindow factoryClass="com.github.qmulda.dependencyanalyser.toolWindow.MyToolWindowFactory"
                     id="DependencyAnalyser"
                     anchor="right"/>
+        <applicationService serviceImplementation="com.github.qmulda.dependencyanalyser.services.EolIndexService"/>
     </extensions>
 </idea-plugin>

@@ -54,6 +54,9 @@ dependencies {
     // Provides google/api/annotations.proto imported by deps.dev api.proto
     implementation("com.google.api.grpc:proto-google-common-protos:2.29.0")
 
+    // Gson for EolIndexService (IntelliJ bundles Gson at runtime; this ensures it's on the compile classpath)
+    implementation("com.google.code.gson:gson:2.10.1")
+
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
         intellijIdea(providers.gradleProperty("platformVersion"))
@@ -176,6 +179,18 @@ intellijPlatformTesting {
             }
         }
     }
+}
+
+// Regenerates eol/purl-to-slug.json from endoflife.date. Run manually before tagging a release:
+//   ./gradlew generatePurlIndex
+// Do NOT wire this into the :build task — network calls in every build break offline dev and CI.
+tasks.register<JavaExec>("generatePurlIndex") {
+    group = "build"
+    description = "Regenerates eol/purl-to-slug.json from endoflife.date (run before tagging a release)"
+    // buildSrc.jar is a fat JAR (SnakeYAML + Gson bundled) built before any main-project task runs.
+    classpath = files("$rootDir/buildSrc/build/libs/buildSrc.jar")
+    mainClass.set("com.github.qmulda.dependencyanalyser.buildtools.PurlIndexGenerator")
+    args = listOf(project.rootDir.absolutePath)
 }
 
 // Configure protobuf compiler for gRPC code generation
