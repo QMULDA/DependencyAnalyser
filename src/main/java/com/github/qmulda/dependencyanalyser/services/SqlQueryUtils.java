@@ -121,7 +121,7 @@ public final class SqlQueryUtils {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     int versionId = rs.getInt("version_id");
-                    // Risk tiers shift between scans as new versions are released — always update
+                    // Risk tiers shift between scans as new versions are released - always update
                     try (PreparedStatement upd = conn.prepareStatement(
                             "UPDATE version SET risk_tier = ? WHERE version_id = ?")) {
                         upd.setString(1, tierName);
@@ -241,7 +241,7 @@ public final class SqlQueryUtils {
                 libraryId, versionString, tierName);
     }
 
-    /** Inserts one dependency row linking a scan to a version. No upsert — each scan produces fresh rows. */
+    /** Inserts one dependency row linking a scan to a version. No upsert - each scan produces fresh rows. */
     public void insertDependency(int scanId, int versionId, String scope, String relation)
             throws SQLException {
         db.executeUpdate(

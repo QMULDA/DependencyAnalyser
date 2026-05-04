@@ -26,6 +26,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static com.github.qmulda.dependencyanalyser.services.EolIndexService.getInstance;
+
 public class DependencyHandler {
     private static final Logger logger = Logger.getInstance(DependencyHandler.class);
 
@@ -164,6 +166,7 @@ public class DependencyHandler {
                 RiskTierCalculator.assignTiers(allDeps);
 
                 // Persist the entire scan in one transaction
+                //TODO make sure this waits until risk tiers and isDeprecated()/containsCves() is finished calculating
                 utils.persistScan(projectId, name, path, allDeps);
 
                 SwingUtilities.invokeLater(() ->
@@ -196,7 +199,7 @@ public class DependencyHandler {
 
         List<ScannedDependency> result = new ArrayList<>();
         for (Dependencies.Node node : graph.getNodesList()) {
-            // Skip SELF — this node is the direct dep we already have from Maven API
+            // Skip SELF - this node is the direct dep we already have from Maven API
             if ("SELF".equals(node.getRelation().name())) continue;
 
             String nodeName = node.getVersionKey().getName();
@@ -236,5 +239,28 @@ public class DependencyHandler {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 not available", e);
         }
+    }
+
+    //TODO Change sample project to point a Spring Petclinic
+    public boolean isDeprecated(String groupId, String artifactId, String versionString) {
+
+        EolIndexService eolIndexService = getInstance();
+        Optional<String> slug = eolIndexService.lookupEolSlug(groupId, artifactId);
+        if (slug.isEmpty()) {
+            java.lang.System.out.println("No EOL slug found for " + groupId + ":" + artifactId + "(EOL.date doesn't track this lib), skipping deprecation check/defaulting to 'not deprecated'");
+            return false;
+        }
+
+        return eolIndexService.lookupCycle(groupId, artifactId, versionString)
+                .map(cycleInfo -> {
+                    java.lang.System.out.println("Matched version " + versionString + " to EOL cycle "
+                            + cycleInfo.cycle() + " for " + groupId + ":" + artifactId);
+                    return cycleInfo.isEol();
+                })
+                .orElseGet(() -> {
+                    java.lang.System.out.println("No matching EOL cycle found for version " + versionString
+                            + " of " + groupId + ":" + artifactId + ", defaulting to not deprecated");
+                    return false;
+                });
     }
 }

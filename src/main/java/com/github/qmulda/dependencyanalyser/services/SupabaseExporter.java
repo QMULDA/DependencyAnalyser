@@ -80,7 +80,7 @@ public class SupabaseExporter {
                 }
 
                 SwingUtilities.invokeLater(() ->
-                        JOptionPane.showMessageDialog(parent, "Export complete — all tables uploaded to Supabase.", "Export", JOptionPane.INFORMATION_MESSAGE)
+                        JOptionPane.showMessageDialog(parent, "Export complete - all tables uploaded to Supabase.", "Export", JOptionPane.INFORMATION_MESSAGE)
                 );
 
             } catch (Exception e) {

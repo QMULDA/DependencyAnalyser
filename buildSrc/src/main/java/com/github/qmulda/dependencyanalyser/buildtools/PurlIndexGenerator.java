@@ -29,7 +29,7 @@ import java.util.TreeSet;
 public class PurlIndexGenerator {
 
     // Pin to a specific upstream commit for deterministic regeneration.
-    // Re-pinning to a newer SHA is a one-line change — reviewable alongside the resulting diff.
+    // Re-pinning to a newer SHA is a one-line change - reviewable alongside the resulting diff.
     private static final String COMMIT_SHA = "8ed3c7c05c37f05fea8253f7dee513931ee128e5";
 
     private static final String TREES_URL =
@@ -74,7 +74,7 @@ public class PurlIndexGenerator {
                         String existing = index.get(e.getKey());
                         String winner = existing.compareTo(slug) <= 0 ? existing : slug;
                         System.err.println("WARN: duplicate PURL " + e.getKey()
-                                + " in [" + existing + ", " + slug + "] — keeping " + winner);
+                                + " in [" + existing + ", " + slug + "] - keeping " + winner);
                         index.put(e.getKey(), winner);
                     } else {
                         index.put(e.getKey(), e.getValue());
@@ -92,9 +92,9 @@ public class PurlIndexGenerator {
         writeJsonFile(new TreeMap<>(index), purlOutputPath);
         System.out.println("Wrote " + index.size() + " entries to " + purlOutputPath);
 
-        // slug → release cycles index
+        // slug -> release cycles index
         Set<String> uniqueSlugs = new TreeSet<>(index.values());
-        Map<String, List<Map<String, Object>>> cycleIndex = fetchCycles(uniqueSlugs, client);
+        Map<String, List<Map<String, Object>>> cycleIndex = fetchReleaseCycleData(uniqueSlugs, client);
         Path cyclesOutputPath = Path.of(projectRoot, "src", "main", "resources", "eol", "eol-cycles.json");
         writeJsonFile(new TreeMap<>(cycleIndex), cyclesOutputPath);
         System.out.println("Wrote cycle data for " + cycleIndex.size() + " slugs to " + cyclesOutputPath);
@@ -120,7 +120,7 @@ public class PurlIndexGenerator {
                 HttpResponse<String> resp = client.send(request, HttpResponse.BodyHandlers.ofString());
                 if (resp.statusCode() != 200) {
                     System.err.println("WARN: could not fetch cycles for " + slug
-                            + " (HTTP " + resp.statusCode() + ") — skipping");
+                            + " (HTTP " + resp.statusCode() + ") - skipping");
                     continue;
                 }
 
@@ -128,12 +128,12 @@ public class PurlIndexGenerator {
                 Map<String, Object> envelope = gson.fromJson(resp.body(), mapType);
                 Object resultObj = envelope.get("result");
                 if (!(resultObj instanceof Map<?, ?> productResult)) {
-                    System.err.println("WARN: missing 'result' field for " + slug + " — skipping");
+                    System.err.println("WARN: missing 'result' field for " + slug + " - skipping");
                     continue;
                 }
                 Object releasesObj = productResult.get("releases");
                 if (!(releasesObj instanceof List<?> releases)) {
-                    System.err.println("WARN: missing 'releases' array for " + slug + " — skipping");
+                    System.err.println("WARN: missing 'releases' array for " + slug + " - skipping");
                     continue;
                 }
 
@@ -223,7 +223,7 @@ public class PurlIndexGenerator {
 
         HttpResponse<String> resp = client.send(rb.build(), HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200) {
-            System.err.println("WARN: HTTP " + resp.statusCode() + " for " + url + " — skipping");
+            System.err.println("WARN: HTTP " + resp.statusCode() + " for " + url + " - skipping");
             return null;
         }
         return resp.body();
@@ -235,14 +235,14 @@ public class PurlIndexGenerator {
         Map<String, String> result = new HashMap<>();
 
         if (!fileContent.startsWith("---")) {
-            System.err.println("WARN: " + slug + " does not start with '---' — skipping");
+            System.err.println("WARN: " + slug + " does not start with '---' - skipping");
             return result;
         }
 
         // Split on bare '---' lines; parts[0] is empty, parts[1] is frontmatter, parts[2]+ is body
         String[] parts = fileContent.split("(?m)^---\\s*$", 3);
         if (parts.length < 2) {
-            System.err.println("WARN: " + slug + " missing closing frontmatter delimiter — skipping");
+            System.err.println("WARN: " + slug + " missing closing frontmatter delimiter - skipping");
             return result;
         }
 

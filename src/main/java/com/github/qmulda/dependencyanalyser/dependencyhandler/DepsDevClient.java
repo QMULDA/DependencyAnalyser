@@ -1,32 +1,18 @@
 package com.github.qmulda.dependencyanalyser.dependencyhandler;
 
-import deps_dev.v3.InsightsGrpc;
-import deps_dev.v3.Api.Dependencies;
-import deps_dev.v3.Api.GetDependenciesRequest;
-import deps_dev.v3.Api.GetVersionRequest;
-import deps_dev.v3.Api.VersionKey;
-import deps_dev.v3.Api.Version;
+import deps_dev.v3.Api.*;
 import deps_dev.v3.Api.System;
-import deps_dev.v3.Api.Advisory;
-import deps_dev.v3.Api.AdvisoryKey;
-import deps_dev.v3.Api.GetAdvisoryRequest;
+import deps_dev.v3.InsightsGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-
-import static java.net.http.HttpClient.newHttpClient;
 
 public class DepsDevClient {
 
@@ -238,21 +224,6 @@ public class DepsDevClient {
             }
         }
         return CvesForDep;
-    }
-
-    //TODO convert this to use eol.date. Change sample project to point a Spring Petclinic
-    public boolean isDeprecated(String groupId, String artifactId, String versionString) throws IOException, InterruptedException {
-
-        HttpClient httpClient = newHttpClient();
-        String url = "https://api.deps.dev/v3/systems/maven/packages/" + groupId + "%3A" + artifactId + "/versions/" + versionString;
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Accept", "application/json")
-                .build();
-
-        HttpResponse<String> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        boolean isDeprecated = !resp.body().contains("isDeprecated\":false");
-        return isDeprecated;
     }
 
     public void shutdown() {

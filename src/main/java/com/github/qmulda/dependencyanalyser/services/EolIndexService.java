@@ -89,7 +89,7 @@ public final class EolIndexService {
     private Map<String, String> loadIndex() {
         try (var stream = getClass().getResourceAsStream("/eol/purl-to-slug.json")) {
             if (stream == null) {
-                logger.warn("purl-to-slug.json not found in classpath — EOL lookups will return empty");
+                logger.warn("purl-to-slug.json not found in classpath - EOL lookups will return empty");
                 return Map.of();
             }
             Type type = new TypeToken<Map<String, String>>() {}.getType();
@@ -102,10 +102,13 @@ public final class EolIndexService {
         }
     }
 
+    /*
+    *  Returns all cycles in eol-cycles.json
+    */
     private Map<String, List<CycleInfo>> loadCycles() {
         try (var stream = getClass().getResourceAsStream("/eol/eol-cycles.json")) {
             if (stream == null) {
-                logger.warn("eol-cycles.json not found in classpath — cycle lookups will return empty");
+                logger.warn("eol-cycles.json not found in classpath - cycle lookups will return empty");
                 return Map.of();
             }
             // Parse as maps first, Gson cannot deserialise records directly
@@ -134,7 +137,7 @@ public final class EolIndexService {
         }
     }
 
-    // Mirrors PurlIndexGenerator.mavenPurl() — both must stay identical.
+    // Mirrors PurlIndexGenerator.mavenPurl() - both must stay identical.
     // buildSrc/ code is not on the plugin runtime classpath, so the helper is duplicated here.
     private static String mavenPurl(String groupId, String artifactId) {
         return "pkg:maven/" + groupId + "/" + artifactId;

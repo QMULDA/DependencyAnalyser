@@ -31,7 +31,7 @@ public class SemverParserTest {
 
     @Test
     public void parseTwoPartDefaultsPatchToZero() {
-        // 1.5-M3 → strip "-M3" → "1.5" → patch defaults to 0
+        // 1.5-M3 -> strip "-M3" -> "1.5" -> patch defaults to 0
         Optional<Semver> result = SemverParser.parse("1.5-M3");
         assertTrue(result.isPresent());
         Semver sv = result.get();
@@ -69,13 +69,13 @@ public class SemverParserTest {
     // Invalid inputs
     @Test
     public void rejectSpringDotReleaseQualifier() {
-        // 2.0.0.RELEASE has 4 dot-separated segments — reject
+        // 2.0.0.RELEASE has 4 dot-separated segments - reject
         assertFalse(SemverParser.parse("2.0.0.RELEASE").isPresent());
     }
 
     @Test
     public void rejectCalendarVersion() {
-        // 2023 > 999 — calendar version, not semver
+        // 2023 > 999 - calendar version, not semver
         assertFalse(SemverParser.parse("2023.0.1").isPresent());
     }
 

@@ -26,7 +26,7 @@ public final class SemverParser {
             System.out.println("Rejecting version with less than 2 segments: " + versionString);
             return Optional.empty();
         }
-        // More than 3 segments means a non-standard qualifier like 2.0.0.RELEASE — reject
+        // More than 3 segments means a non-standard qualifier like 2.0.0.RELEASE - reject
         if (parts.length > 3) {
             System.out.println("Rejecting version with more than 3 segments: " + versionString);
             return Optional.empty();
@@ -37,7 +37,7 @@ public final class SemverParser {
             int minor = Integer.parseInt(parts[1]);
             int patch = parts.length == 3 ? Integer.parseInt(parts[2]) : 0;
 
-            // Reject calendar versions (e.g. 2023.0.1 — 2023 > 999).
+            // Reject calendar versions (e.g. 2023.0.1 - 2023 > 999).
             if (major > 999 || minor > 999 || patch > 999) {
                 System.out.println("Rejecting version with component > 999: " + versionString);
                 return Optional.empty();
