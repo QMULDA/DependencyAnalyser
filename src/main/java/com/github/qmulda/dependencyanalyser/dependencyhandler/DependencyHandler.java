@@ -2,6 +2,8 @@ package com.github.qmulda.dependencyanalyser.dependencyhandler;
 
 import com.github.qmulda.dependencyanalyser.risk.RiskTierCalculator;
 import com.github.qmulda.dependencyanalyser.scan.ScannedDependency;
+import com.github.qmulda.dependencyanalyser.services.CycleInfo;
+import com.github.qmulda.dependencyanalyser.services.EolIndexService;
 import com.github.qmulda.dependencyanalyser.services.SqlQueryUtils;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
@@ -16,6 +18,7 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.Component;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
@@ -84,11 +87,15 @@ public class DependencyHandler {
                             List<String> CvesForDep = client.getCve(advisoryIds);
                             System.out.println("CVEs for " + coords + ": " + CvesForDep);
 
-                            boolean isDeprecated = client.isDeprecated(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+                            Optional<CycleInfo> cycleInfo = EolIndexService.getInstance()
+                                    .lookupCycle(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+                            boolean isDeprecated  = cycleInfo.map(CycleInfo::isEol).orElse(false);
+                            String releaseCycle   = cycleInfo.map(CycleInfo::cycle).orElse(null);
+                            String eolFrom        = cycleInfo.map(CycleInfo::eolFrom).orElse(null);
 
                             directDeps.add(new ScannedDependency(
                                     dep.getGroupId(), dep.getArtifactId(), dep.getVersion(),
-                                    dep.getScope(), "DIRECT", advisoryIds, isDeprecated
+                                    dep.getScope(), "DIRECT", advisoryIds, isDeprecated, releaseCycle, eolFrom
                             ));
                         }
                     }
@@ -206,10 +213,15 @@ public class DependencyHandler {
                 System.out.println("No CVEs for " + coords);
             }
 
-            boolean isDeprecated = client.isDeprecated(dep.groupId, dep.artifactId, dep.version);
+            Optional<CycleInfo> cycleInfo = EolIndexService.getInstance()
+                    .lookupCycle(groupId, artifactId, version);
+            boolean isDeprecated = cycleInfo.map(CycleInfo::isEol).orElse(false);
+            String releaseCycle  = cycleInfo.map(CycleInfo::cycle).orElse(null);
+            String eolFrom       = cycleInfo.map(CycleInfo::eolFrom).orElse(null);
 
             // All non-SELF nodes from deps.dev are indirect from the project's perspective
-            result.add(new ScannedDependency(groupId, artifactId, version, "transitive", "INDIRECT", advisoryIds, isDeprecated));
+            result.add(new ScannedDependency(groupId, artifactId, version, "transitive", "INDIRECT",
+                    advisoryIds, isDeprecated, releaseCycle, eolFrom));
         }
         return result;
     }
