@@ -44,6 +44,7 @@ public class DependencyHandler {
 
     public void performScan() {
         System.out.println("performScan() CALLED");
+        //TODO fix UI freezing when "Scan Project" clicked
         statusLabel.setText("Getting direct deps...");
         try {
             SwingUtilities.invokeLater(() -> {

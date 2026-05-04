@@ -76,6 +76,7 @@ public class MyToolWindowFactory implements ToolWindowFactory {
             titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD));
             headerPanel.add(titleLabel, BorderLayout.WEST);
 
+            //TODO make it so that you can sort groupIds in alphabetical order
             JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
             JButton scanButton = new JButton("Scan Project");
             scanButton.addActionListener(e -> handler.performScan());
