@@ -83,7 +83,15 @@ public class MyToolWindowFactory implements ToolWindowFactory {
 
             JButton exportButton = new JButton("Export to Cloud");
             SupabaseExporter exporter = new SupabaseExporter(project);
-            exportButton.addActionListener(e -> exporter.exportAll(content));
+            exportButton.addActionListener(e -> {
+                String orgName = JOptionPane.showInputDialog(
+                        content,
+                        "Enter your organisation name (optional):",
+                        "Export to Cloud",
+                        JOptionPane.PLAIN_MESSAGE
+                );
+                exporter.exportAll(content, DependencyHandler.projectIdFor(project), orgName);
+            });
             buttonPanel.add(exportButton);
 
             headerPanel.add(buttonPanel, BorderLayout.EAST);

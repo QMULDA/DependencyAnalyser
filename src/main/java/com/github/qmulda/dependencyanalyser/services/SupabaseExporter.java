@@ -1,5 +1,6 @@
 package com.github.qmulda.dependencyanalyser.services;
 
+import com.github.qmulda.dependencyanalyser.util.HashUtils;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 
@@ -18,15 +19,15 @@ import java.util.Set;
 public class SupabaseExporter {
 
     // FK-safe export order: parents before children.
-    // release_cycle -> library; version -> library + release_cycle;
+    // organisation before project; release_cycle -> library; version -> library + release_cycle;
     // version_advisory -> version + advisory; dependency -> scan + version.
     private static final String[] TABLE_ORDER = {
-            "project", "library", "release_cycle", "advisory",
+            "organisation", "project", "library", "release_cycle", "advisory",
             "scan", "version", "dependency", "version_advisory"};
 
     // Tables with natural unique keys that require upsert on re-export to avoid duplicates
     private static final Set<String> UPSERT_TABLES = Set.of(
-            "project", "release_cycle", "advisory", "version_advisory");
+            "organisation", "project", "release_cycle", "advisory", "version_advisory");
 
     private final Project project;
 
@@ -34,7 +35,7 @@ public class SupabaseExporter {
         this.project = project;
     }
 
-    public void exportAll(Component parent) {
+    public void exportAll(Component parent, String projectId, String orgName) {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
                 String supabaseUrl = SupabaseConfig.SUPABASE_URL;
@@ -45,13 +46,18 @@ public class SupabaseExporter {
                     return;
                 }
 
+                if (orgName != null && !orgName.isBlank() && projectId != null) {
+                    String orgId = HashUtils.sha256Hex(orgName.trim().toLowerCase());
+                    SqlQueryUtils.getInstance(project).setProjectOrg(projectId, orgId, orgName.trim());
+                }
+
                 DatabaseService dbService = DatabaseService.getInstance(project);
                 HttpClient httpClient = HttpClient.newHttpClient();
 
                 for (String table : TABLE_ORDER) {
                     // Never export `path` - local filesystem data must not leave the machine
                     String selectSql = "project".equals(table)
-                            ? "SELECT project_id, name, last_scanned FROM project"
+                            ? "SELECT project_id, name, last_scanned, org_id FROM project"
                             : "SELECT * FROM " + table;
                     List<Map<String, Object>> rows = dbService.executeQuery(selectSql);
                     if (rows.isEmpty()) {

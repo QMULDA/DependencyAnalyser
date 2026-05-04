@@ -223,6 +223,33 @@ public final class SqlQueryUtils {
         }
     }
 
+    /**
+     * Idempotent upsert for organisation row, adds org_id to project row.
+     */
+    public void setProjectOrg(String projectId, String orgId, String orgName) throws SQLException {
+        try (Connection conn = db.getConnection();
+             PreparedStatement upsertOrg = conn.prepareStatement(
+                     "MERGE INTO organisation (org_id, name) KEY (org_id) VALUES (?, ?)");
+             PreparedStatement stampProject = conn.prepareStatement(
+                     "UPDATE project SET org_id = ? WHERE project_id = ?")) {
+            conn.setAutoCommit(false);
+            try {
+                upsertOrg.setString(1, orgId);
+                upsertOrg.setString(2, orgName);
+                upsertOrg.executeUpdate();
+
+                stampProject.setString(1, orgId);
+                stampProject.setString(2, projectId);
+                stampProject.executeUpdate();
+
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
+        }
+    }
+
     // old methods
 
     /** Returns the existing project_id for the given projectId, or inserts a new row and returns it. */

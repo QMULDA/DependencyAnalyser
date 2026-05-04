@@ -17,11 +17,9 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.Component;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Optional;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
+import com.github.qmulda.dependencyanalyser.util.HashUtils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -66,7 +64,7 @@ public class DependencyHandler {
                     MavenProject root = roots.get(0);
                     String groupId = root.getMavenId().getGroupId();
                     String artifactId = root.getMavenId().getArtifactId();
-                    String projectId = sha256Hex(groupId + ":" + artifactId);
+                    String projectId = projectIdFor(project);
                     String name = root.getName();
                     if (name == null || name.isBlank()) name = artifactId;
                     String path = root.getDirectory();
@@ -229,16 +227,12 @@ public class DependencyHandler {
         return result;
     }
 
-    private static String sha256Hex(String input) {
-        try {
-            MessageDigest sha = MessageDigest.getInstance("SHA-256");
-            byte[] hash = sha.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder();
-            for (byte b : hash) hex.append(String.format("%02x", b));
-            return hex.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 not available", e);
-        }
+    /** Returns the stable project ID for the Maven root of the given IntelliJ project, or null if not a Maven project. */
+    public static String projectIdFor(Project intellijProject) {
+        List<MavenProject> roots = MavenProjectsManager.getInstance(intellijProject).getRootProjects();
+        if (roots.isEmpty()) return null;
+        MavenProject root = roots.get(0);
+        return HashUtils.sha256Hex(root.getMavenId().getGroupId() + ":" + root.getMavenId().getArtifactId());
     }
 
     //TODO Change sample project to point a Spring Petclinic
