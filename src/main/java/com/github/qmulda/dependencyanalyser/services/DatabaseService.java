@@ -139,7 +139,7 @@ public final class DatabaseService {
                 for (int i = 1; i <= columnCount; i++) {
                     String columnName = metadata.getColumnName(i);
                     Object value = resultSet.getObject(i);
-                    row.put(columnName, value != null ? value : "");
+                    row.put(columnName, value);
                 }
                 results.add(row);
             }
