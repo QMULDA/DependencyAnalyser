@@ -13,12 +13,20 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class SupabaseExporter {
 
-    // FK-safe export order: project and library have no FKs; scan -> project;
-    // version -> library; dependency -> scan+version.
-    private static final String[] TABLE_ORDER = {"project", "scan", "library", "version", "dependency"};
+    // FK-safe export order: parents before children.
+    // release_cycle -> library; version -> library + release_cycle;
+    // version_advisory -> version + advisory; dependency -> scan + version.
+    private static final String[] TABLE_ORDER = {
+            "project", "library", "release_cycle", "advisory",
+            "scan", "version", "dependency", "version_advisory"};
+
+    // Tables with natural unique keys that require upsert on re-export to avoid duplicates
+    private static final Set<String> UPSERT_TABLES = Set.of(
+            "project", "release_cycle", "advisory", "version_advisory");
 
     private final Project project;
 
@@ -54,8 +62,7 @@ public class SupabaseExporter {
                     String json = toJsonArray(rows);
                     System.out.println("Exporting table '" + table + "' (" + rows.size() + " rows)");
 
-                    // Use merge-duplicates on project so re-exports update the existing row
-                    String prefer = "project".equals(table)
+                    String prefer = UPSERT_TABLES.contains(table)
                             ? "resolution=merge-duplicates,return=minimal"
                             : "return=minimal";
 

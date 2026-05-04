@@ -9,8 +9,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Collection of SQL statements to deal with H2 db. Used with DatabaseService.
@@ -34,16 +34,21 @@ public final class SqlQueryUtils {
      *
      * @return the generated scan_id
      */
-    public int persistScan(String projectId, String name, String path,
-                           List<ScannedDependency> deps) throws SQLException {
+    public String persistScan(String projectId, String name, String path,
+                              List<ScannedDependency> deps) throws SQLException {
         try (Connection conn = db.getConnection()) {
             conn.setAutoCommit(false);
             try {
                 upsertProjectConn(conn, projectId, name, path);
-                int scanId = insertScanConn(conn, projectId);
+                String scanId = insertScanConn(conn, projectId);
                 for (ScannedDependency dep : deps) {
-                    int libId = upsertLibraryConn(conn, dep.groupId, dep.artifactId);
-                    int versionId = upsertVersionConn(conn, libId, dep.version, dep.riskTier);
+                    String libId = upsertLibraryConn(conn, dep.groupId, dep.artifactId);
+                    String cycleId = upsertReleaseCycleConn(conn, libId, dep);
+                    String versionId = upsertVersionConn(conn, libId, dep.version, dep.riskTier, cycleId);
+                    for (String advisoryId : dep.advisoryIds) {
+                        upsertAdvisoryConn(conn, advisoryId);
+                        insertVersionAdvisoryConn(conn, versionId, advisoryId);
+                    }
                     insertDependencyConn(conn, scanId, versionId, dep.scope, dep.relation);
                 }
                 updateLastScannedConn(conn, projectId);
@@ -75,85 +80,137 @@ public final class SqlQueryUtils {
         }
     }
 
-    private int insertScanConn(Connection conn, String projectId) throws SQLException {
+    private String insertScanConn(Connection conn, String projectId) throws SQLException {
+        String id = UUID.randomUUID().toString();
         try (PreparedStatement ps = conn.prepareStatement(
-                "INSERT INTO scan (project_id) VALUES (?)",
-                Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, projectId);
+                "INSERT INTO scan (scan_id, project_id) VALUES (?, ?)")) {
+            ps.setString(1, id);
+            ps.setString(2, projectId);
             ps.executeUpdate();
-            try (ResultSet keys = ps.getGeneratedKeys()) {
-                if (keys.next()) return keys.getInt(1);
-                throw new SQLException("Insert into scan succeeded but no generated key returned");
-            }
         }
+        return id;
     }
 
-    private int upsertLibraryConn(Connection conn, String groupId,
-                                  String artifactId) throws SQLException {
+    private String upsertLibraryConn(Connection conn, String groupId,
+                                     String artifactId) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT library_id FROM library WHERE group_id = ? AND artifact_id = ?")) {
             ps.setString(1, groupId);
             ps.setString(2, artifactId);
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return rs.getInt("library_id");
+                if (rs.next()) return rs.getString("library_id");
             }
         }
+        String id = UUID.randomUUID().toString();
         try (PreparedStatement ps = conn.prepareStatement(
-                "INSERT INTO library (group_id, artifact_id) VALUES (?, ?)",
-                Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, groupId);
-            ps.setString(2, artifactId);
+                "INSERT INTO library (library_id, group_id, artifact_id) VALUES (?, ?, ?)")) {
+            ps.setString(1, id);
+            ps.setString(2, groupId);
+            ps.setString(3, artifactId);
             ps.executeUpdate();
-            try (ResultSet keys = ps.getGeneratedKeys()) {
-                if (keys.next()) return keys.getInt(1);
-                throw new SQLException("Insert into library succeeded but no generated key returned");
-            }
         }
+        return id;
     }
 
-    private int upsertVersionConn(Connection conn, int libraryId, String versionString,
-                                  RiskTier riskTier) throws SQLException {
+    private String upsertVersionConn(Connection conn, String libraryId, String versionString,
+                                     RiskTier riskTier, String releaseCycleId) throws SQLException {
         String tierName = riskTier != null ? riskTier.name() : null;
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT version_id FROM version WHERE library_id = ? AND version_string = ?")) {
-            ps.setInt(1, libraryId);
+            ps.setString(1, libraryId);
             ps.setString(2, versionString);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    int versionId = rs.getInt("version_id");
-                    // Risk tiers shift between scans as new versions are released - always update
+                    String versionId = rs.getString("version_id");
+                    // Risk tiers and cycle assignments shift between scans — always update
                     try (PreparedStatement upd = conn.prepareStatement(
-                            "UPDATE version SET risk_tier = ? WHERE version_id = ?")) {
+                            "UPDATE version SET risk_tier = ?, release_cycle_id = ? WHERE version_id = ?")) {
                         upd.setString(1, tierName);
-                        upd.setInt(2, versionId);
+                        if (releaseCycleId != null) upd.setString(2, releaseCycleId); else upd.setNull(2, java.sql.Types.OTHER);
+                        upd.setString(3, versionId);
                         upd.executeUpdate();
                     }
                     return versionId;
                 }
             }
         }
+        String id = UUID.randomUUID().toString();
         try (PreparedStatement ps = conn.prepareStatement(
-                "INSERT INTO version (library_id, version_string, risk_tier) VALUES (?, ?, ?)",
-                Statement.RETURN_GENERATED_KEYS)) {
-            ps.setInt(1, libraryId);
-            ps.setString(2, versionString);
-            ps.setString(3, tierName);
+                "INSERT INTO version (version_id, library_id, version_string, risk_tier, release_cycle_id) VALUES (?, ?, ?, ?, ?)")) {
+            ps.setString(1, id);
+            ps.setString(2, libraryId);
+            ps.setString(3, versionString);
+            ps.setString(4, tierName);
+            if (releaseCycleId != null) ps.setString(5, releaseCycleId); else ps.setNull(5, java.sql.Types.OTHER);
             ps.executeUpdate();
-            try (ResultSet keys = ps.getGeneratedKeys()) {
-                if (keys.next()) return keys.getInt(1);
-                throw new SQLException("Insert into version succeeded but no generated key returned");
+        }
+        return id;
+    }
+
+    private String upsertReleaseCycleConn(Connection conn, String libraryId,
+                                          ScannedDependency dep) throws SQLException {
+        if (dep.releaseCycle == null) return null;
+        java.sql.Date eolDate = dep.eolFrom != null ? java.sql.Date.valueOf(dep.eolFrom) : null;
+
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT release_cycle_id FROM release_cycle WHERE library_id = ? AND cycle_name = ?")) {
+            ps.setString(1, libraryId);
+            ps.setString(2, dep.releaseCycle);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String cycleId = rs.getString("release_cycle_id");
+                    try (PreparedStatement upd = conn.prepareStatement(
+                            "UPDATE release_cycle SET eol_from = ?, is_eol = ? WHERE release_cycle_id = ?")) {
+                        if (eolDate != null) upd.setDate(1, eolDate); else upd.setNull(1, java.sql.Types.DATE);
+                        upd.setBoolean(2, dep.isDeprecated);
+                        upd.setString(3, cycleId);
+                        upd.executeUpdate();
+                    }
+                    return cycleId;
+                }
             }
+        }
+        String id = UUID.randomUUID().toString();
+        try (PreparedStatement ps = conn.prepareStatement(
+                "INSERT INTO release_cycle (release_cycle_id, library_id, cycle_name, eol_from, is_eol) VALUES (?, ?, ?, ?, ?)")) {
+            ps.setString(1, id);
+            ps.setString(2, libraryId);
+            ps.setString(3, dep.releaseCycle);
+            if (eolDate != null) ps.setDate(4, eolDate); else ps.setNull(4, java.sql.Types.DATE);
+            ps.setBoolean(5, dep.isDeprecated);
+            ps.executeUpdate();
+        }
+        return id;
+    }
+
+    private void upsertAdvisoryConn(Connection conn, String advisoryId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "MERGE INTO advisory (advisory_id) KEY (advisory_id) VALUES (?)")) {
+            ps.setString(1, advisoryId);
+            ps.executeUpdate();
         }
     }
 
-    private void insertDependencyConn(Connection conn, int scanId, int versionId,
-                                      String scope, String relation) throws SQLException {
+    private void insertVersionAdvisoryConn(Connection conn, String versionId,
+                                           String advisoryId) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(
-                "INSERT INTO dependency (scan_id, version_id, scope, relation) VALUES (?, ?, ?, ?)")) {
-            ps.setInt(1, scanId);
-            ps.setInt(2, versionId);
-            ps.setString(3, scope);
-            ps.setString(4, relation);
+                "MERGE INTO version_advisory (version_id, advisory_id) KEY (version_id, advisory_id) VALUES (?, ?)")) {
+            ps.setString(1, versionId);
+            ps.setString(2, advisoryId);
+            ps.executeUpdate();
+        }
+    }
+
+    private void insertDependencyConn(Connection conn, String scanId, String versionId,
+                                      String scope, String relation) throws SQLException {
+        String id = UUID.randomUUID().toString();
+        try (PreparedStatement ps = conn.prepareStatement(
+                "INSERT INTO dependency (dependency_id, scan_id, version_id, scope, relation) VALUES (?, ?, ?, ?, ?)")) {
+            ps.setString(1, id);
+            ps.setString(2, scanId);
+            ps.setString(3, versionId);
+            ps.setString(4, scope);
+            ps.setString(5, relation);
             ps.executeUpdate();
         }
     }
