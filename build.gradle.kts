@@ -4,19 +4,25 @@ import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("java") // Java support
-    alias(libs.plugins.kotlin) // Kotlin support
     alias(libs.plugins.intelliJPlatform) // IntelliJ Platform Gradle Plugin
     alias(libs.plugins.changelog) // Gradle Changelog Plugin
     alias(libs.plugins.qodana) // Gradle Qodana Plugin
     alias(libs.plugins.kover) // Gradle Kover Plugin
+    id("com.google.protobuf") version "0.9.4" // Protocol Buffers compiler
 }
 
 group = providers.gradleProperty("pluginGroup").get()
 version = providers.gradleProperty("pluginVersion").get()
 
 // Set the JVM language level used to build the project.
-kotlin {
-    jvmToolchain(21)
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.withType<org.jetbrains.intellij.platform.gradle.tasks.InstrumentCodeTask> {
+    enabled = false
 }
 
 // Configure project's dependencies
@@ -33,6 +39,23 @@ repositories {
 dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
+
+    // H2 Database
+    implementation("com.h2database:h2:2.2.224")
+
+    // Flyway for database migrations
+    implementation("org.flywaydb:flyway-core:9.22.3")
+
+    // gRPC dependencies for deps.dev API integration
+    runtimeOnly("io.grpc:grpc-netty-shaded:1.63.0")
+    implementation("io.grpc:grpc-protobuf:1.63.0")
+    implementation("io.grpc:grpc-stub:1.63.0")
+    implementation("javax.annotation:javax.annotation-api:1.3.2")
+    // Provides google/api/annotations.proto imported by deps.dev api.proto
+    implementation("com.google.api.grpc:proto-google-common-protos:2.29.0")
+
+    // Gson for EolIndexService (IntelliJ bundles Gson at runtime; this ensures it's on the compile classpath)
+    implementation("com.google.code.gson:gson:2.10.1")
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
@@ -157,3 +180,27 @@ intellijPlatformTesting {
         }
     }
 }
+
+// Regenerates eol/purl-to-slug.json from endoflife.date. Run manually before tagging a release:
+//   ./gradlew generatePurlIndex
+// Do NOT wire this into the :build task — network calls in every build break offline dev and CI.
+tasks.register<JavaExec>("generatePurlIndex") {
+    group = "build"
+    description = "Regenerates eol/purl-to-slug.json from endoflife.date (run before tagging a release)"
+    // buildSrc.jar is a fat JAR (SnakeYAML + Gson bundled) built before any main-project task runs.
+    classpath = files("$rootDir/buildSrc/build/libs/buildSrc.jar")
+    mainClass.set("com.github.qmulda.dependencyanalyser.buildtools.PurlIndexGenerator")
+    args = listOf(project.rootDir.absolutePath)
+}
+
+// Configure protobuf compiler for gRPC code generation
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:3.25.3" }
+    plugins {
+        create("grpc") { artifact = "io.grpc:protoc-gen-grpc-java:1.63.0" }
+    }
+    generateProtoTasks {
+        all().forEach { it.plugins { create("grpc") } }
+    }
+}
+
