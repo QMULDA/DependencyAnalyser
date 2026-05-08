@@ -42,7 +42,7 @@ public class SupabaseExporter {
                 String secretKey = SupabaseConfig.secretKey();
 
                 if (supabaseUrl.startsWith("YOUR_") || secretKey.startsWith("YOUR_")) {
-                    showError(parent, "Supabase credentials are not configured.\nFill in SupabaseConfig.java with your Project URL and Secret key.");
+                    showError(parent, "Supabase credentials are not configured.\nFill in local.properties with your Project URL and Secret key.");
                     return;
                 }
 

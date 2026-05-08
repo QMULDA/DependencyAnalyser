@@ -6,5 +6,4 @@
 .qodana
 bin
 build
-src/**/SupabaseConfig.java
 /local.properties
