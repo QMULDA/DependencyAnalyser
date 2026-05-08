@@ -19,7 +19,9 @@ import java.awt.Component;
 import java.io.IOException;
 import java.util.Optional;
 import java.sql.SQLException;
+
 import com.github.qmulda.dependencyanalyser.util.HashUtils;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -44,87 +46,85 @@ public class DependencyHandler {
 
     public void performScan() {
         System.out.println("performScan() CALLED");
-        //TODO fix UI freezing when "Scan Project" clicked
         statusLabel.setText("Getting direct deps...");
-        try {
-            SwingUtilities.invokeLater(() -> {
-                try {
-                    System.out.println("Starting dependency scan");
-                    tableModel.setRowCount(0);
+        SwingUtilities.invokeLater(() -> tableModel.setRowCount(0));
 
-                    MavenProjectsManager manager = MavenProjectsManager.getInstance(project);
-                    System.out.println("Is Maven project: " + manager.isMavenizedProject());
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            DepsDevClient client = new DepsDevClient();
+            try {
+                System.out.println("Starting dependency scan");
 
-                    List<MavenProject> roots = manager.getRootProjects();
-                    if (roots.isEmpty()) {
-                        JOptionPane.showMessageDialog(parent,
-                                "No Maven root project found.", "Scan Error", JOptionPane.ERROR_MESSAGE);
-                        return;
+                MavenProjectsManager manager = MavenProjectsManager.getInstance(project);
+                System.out.println("Is Maven project: " + manager.isMavenizedProject());
+
+                List<MavenProject> roots = manager.getRootProjects();
+                if (roots.isEmpty()) {
+                    SwingUtilities.invokeLater(() ->
+                            JOptionPane.showMessageDialog(parent,
+                                    "No Maven root project found.", "Scan Error", JOptionPane.ERROR_MESSAGE));
+                    return;
+                }
+
+                MavenProject root = roots.get(0);
+                String artifactId = root.getMavenId().getArtifactId();
+                String projectId = projectIdFor(project);
+                String name = root.getName();
+                if (name == null || name.isBlank()) name = artifactId;
+                String path = root.getDirectory();
+
+                System.out.println("project_id = " + projectId);
+                System.out.println("name       = " + name);
+                System.out.println("path       = " + path);
+
+                // Collect direct deps from all Maven modules — runs on pooled thread, not EDT
+                List<ScannedDependency> directDeps = new ArrayList<>();
+                for (MavenProject mp : manager.getProjects()) {
+                    System.out.println("Collecting deps from module: " + mp.getName());
+                    for (var dep : mp.getDependencies()) {
+                        List<String> advisoryIds = client.getPackageMetaData(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+
+                        String coords = dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion();
+
+                        List<String> CvesForDep = client.getCve(advisoryIds);
+                        System.out.println("CVEs for " + coords + ": " + CvesForDep);
+
+                        Optional<CycleInfo> cycleInfo = EolIndexService.getInstance()
+                                .lookupCycle(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
+                        boolean isDeprecated = cycleInfo.map(CycleInfo::isEol).orElse(false);
+                        String releaseCycle = cycleInfo.map(CycleInfo::cycle).orElse(null);
+                        String eolFrom = cycleInfo.map(CycleInfo::eolFrom).orElse(null);
+
+                        directDeps.add(new ScannedDependency(
+                                dep.getGroupId(), dep.getArtifactId(), dep.getVersion(),
+                                dep.getScope(), "DIRECT", advisoryIds, isDeprecated, releaseCycle, eolFrom
+                        ));
                     }
+                }
+                System.out.println("Total direct dependencies collected: " + directDeps.size());
 
-                    MavenProject root = roots.get(0);
-                    String groupId = root.getMavenId().getGroupId();
-                    String artifactId = root.getMavenId().getArtifactId();
-                    String projectId = projectIdFor(project);
-                    String name = root.getName();
-                    if (name == null || name.isBlank()) name = artifactId;
-                    String path = root.getDirectory();
-
-                    System.out.println("project_id = " + projectId);
-                    System.out.println("name       = " + name);
-                    System.out.println("path       = " + path);
-
-                    DepsDevClient client = new DepsDevClient();
-
-                    // Collect direct deps from all Maven modules as ScannedDependency objects
-                    List<ScannedDependency> directDeps = new ArrayList<>();
-                    for (MavenProject mp : manager.getProjects()) {
-                        System.out.println("Collecting deps from module: " + mp.getName());
-                        for (var dep : mp.getDependencies()) {
-                            List<String> advisoryIds = client.getPackageMetaData(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
-
-                            String coords = dep.getGroupId() + ":" + dep.getArtifactId() + ":" + dep.getVersion();
-
-                            List<String> CvesForDep = client.getCve(advisoryIds);
-                            System.out.println("CVEs for " + coords + ": " + CvesForDep);
-
-                            Optional<CycleInfo> cycleInfo = EolIndexService.getInstance()
-                                    .lookupCycle(dep.getGroupId(), dep.getArtifactId(), dep.getVersion());
-                            boolean isDeprecated  = cycleInfo.map(CycleInfo::isEol).orElse(false);
-                            String releaseCycle   = cycleInfo.map(CycleInfo::cycle).orElse(null);
-                            String eolFrom        = cycleInfo.map(CycleInfo::eolFrom).orElse(null);
-
-                            directDeps.add(new ScannedDependency(
-                                    dep.getGroupId(), dep.getArtifactId(), dep.getVersion(),
-                                    dep.getScope(), "DIRECT", advisoryIds, isDeprecated, releaseCycle, eolFrom
-                            ));
-                        }
-                    }
-                    System.out.println("Total direct dependencies collected: " + directDeps.size());
-
-                    // Show direct deps in the table immediately
-                    for (ScannedDependency dep : directDeps) {
+                // Show direct deps in the table — UI update back on EDT
+                final List<ScannedDependency> snapshot = Collections.unmodifiableList(new ArrayList<>(directDeps));
+                SwingUtilities.invokeLater(() -> {
+                    for (ScannedDependency dep : snapshot) {
                         tableModel.addRow(new Object[]{
                                 dep.groupId, dep.artifactId, dep.version, dep.scope, dep.relation
                         });
                     }
-                    statusLabel.setText("Found " + directDeps.size() + " direct deps. Fetching transitives...");
+                    statusLabel.setText("Found " + snapshot.size() + " direct deps. Fetching transitives...");
+                });
 
-                    startBackgroundEnrichment(directDeps, projectId, name, path);
+                startBackgroundEnrichment(directDeps, projectId, name, path);
 
-                } catch (Exception e) {
-                    System.out.println("Error during scan:\n" + e);
-                    JOptionPane.showMessageDialog(parent,
-                            "Error scanning project: " + e.getMessage(),
-                            "Scan Error", JOptionPane.ERROR_MESSAGE);
-                }
-            });
-        } catch (Exception e) {
-            System.out.println("Failed to start scan:\n" + e);
-            JOptionPane.showMessageDialog(parent,
-                    "Failed to start scan: " + e.getMessage(),
-                    "Scan Error", JOptionPane.ERROR_MESSAGE);
-        }
+            } catch (Exception e) {
+                System.out.println("Error during scan:\n" + e);
+                SwingUtilities.invokeLater(() ->
+                        JOptionPane.showMessageDialog(parent,
+                                "Error scanning project: " + e.getMessage(),
+                                "Scan Error", JOptionPane.ERROR_MESSAGE));
+            } finally {
+                client.shutdown();
+            }
+        });
     }
 
     private void startBackgroundEnrichment(List<ScannedDependency> directDeps,
@@ -211,15 +211,15 @@ public class DependencyHandler {
             if (advisoryIds != null) {
                 List<String> CvesForDep = client.getCve(advisoryIds);
                 System.out.println("CVEs for " + coords + ": " + CvesForDep);
-            } else{
+            } else {
                 System.out.println("No CVEs for " + coords);
             }
 
             Optional<CycleInfo> cycleInfo = EolIndexService.getInstance()
                     .lookupCycle(groupId, artifactId, version);
             boolean isDeprecated = cycleInfo.map(CycleInfo::isEol).orElse(false);
-            String releaseCycle  = cycleInfo.map(CycleInfo::cycle).orElse(null);
-            String eolFrom       = cycleInfo.map(CycleInfo::eolFrom).orElse(null);
+            String releaseCycle = cycleInfo.map(CycleInfo::cycle).orElse(null);
+            String eolFrom = cycleInfo.map(CycleInfo::eolFrom).orElse(null);
 
             // All non-SELF nodes from deps.dev are indirect from the project's perspective
             result.add(new ScannedDependency(groupId, artifactId, version, "transitive", "INDIRECT",
@@ -228,7 +228,9 @@ public class DependencyHandler {
         return result;
     }
 
-    /** Returns the stable project ID for the Maven root of the given IntelliJ project, or null if not a Maven project. */
+    /**
+     * Returns the stable project ID for the Maven root of the given IntelliJ project, or null if not a Maven project.
+     */
     public static String projectIdFor(Project intellijProject) {
         List<MavenProject> roots = MavenProjectsManager.getInstance(intellijProject).getRootProjects();
         if (roots.isEmpty()) return null;
@@ -236,7 +238,6 @@ public class DependencyHandler {
         return HashUtils.sha256Hex(root.getMavenId().getGroupId() + ":" + root.getMavenId().getArtifactId());
     }
 
-    //TODO Change sample project to point a Spring Petclinic
     public boolean isDeprecated(String groupId, String artifactId, String versionString) {
 
         EolIndexService eolIndexService = getInstance();
