@@ -5,11 +5,14 @@
     <vendor>qmulda</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.idea.maven</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.qmulda.dependencyanalyser.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.qmulda.dependencyanalyser.startup.MyProjectActivity" />
+        <toolWindow factoryClass="com.github.qmulda.dependencyanalyser.toolWindow.MyToolWindowFactory"
+                    id="DependencyAnalyser"
+                    anchor="right"/>
+        <applicationService serviceImplementation="com.github.qmulda.dependencyanalyser.services.EolIndexService"/>
     </extensions>
 </idea-plugin>
