@@ -12,7 +12,8 @@ import static org.junit.Assert.assertEquals;
 public class RiskTierCalculatorTest {
 
     private static ScannedDependency dep(String groupId, String artifactId, String version) {
-        return new ScannedDependency(groupId, artifactId, version, "compile", "DIRECT");
+        return new ScannedDependency(groupId, artifactId, version, "compile", "DIRECT",
+                Collections.emptyList(), false, null, null);
     }
 
     // Case 1: single version -> NONE 
