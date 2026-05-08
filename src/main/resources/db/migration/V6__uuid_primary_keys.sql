@@ -1,4 +1,4 @@
--- Drop in reverse FK order (existing data is lost; re-scan regenerates it)
+-- Drop in reverse FK order
 DROP TABLE IF EXISTS version_advisory;
 DROP TABLE IF EXISTS dependency;
 DROP TABLE IF EXISTS version;
@@ -6,7 +6,7 @@ DROP TABLE IF EXISTS release_cycle;
 DROP TABLE IF EXISTS scan;
 DROP TABLE IF EXISTS library;
 
--- Recreate with UUID PKs (Java generates the UUIDs before each INSERT)
+-- Recreate with UUID PKs
 CREATE TABLE library (
     library_id  UUID         NOT NULL,
     group_id    VARCHAR(255) NOT NULL,
@@ -68,7 +68,7 @@ CREATE TABLE version_advisory (
     CONSTRAINT fk_va_advisory      FOREIGN KEY (advisory_id) REFERENCES advisory (advisory_id)
 );
 
--- Recreate FK indexes (dropped with the tables above)
+-- Recreate FK indexes
 CREATE INDEX idx_scan_project_id       ON scan(project_id);
 CREATE INDEX idx_dependency_scan_id    ON dependency(scan_id);
 CREATE INDEX idx_dependency_version_id ON dependency(version_id);

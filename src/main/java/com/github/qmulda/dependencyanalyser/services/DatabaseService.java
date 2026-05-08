@@ -29,7 +29,7 @@ import com.intellij.openapi.project.Project;
 @Service(Service.Level.PROJECT)
 public final class DatabaseService {
 
-    private static final String DB_URL = "jdbc:h2:~/.dependencyanalyser/localdb";
+    private static final String DB_URL = "jdbc:h2:~/.dependencyanalyser/localdb;AUTO_SERVER=TRUE";
     private static final String DB_USER = "sa";
     private static final String DB_PASSWORD = "";
 

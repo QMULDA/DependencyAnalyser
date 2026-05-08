@@ -10,14 +10,14 @@ ALTER TABLE scan DROP CONSTRAINT fk_scan_project;
 ALTER TABLE scan DROP COLUMN project_id;
 ALTER TABLE scan ADD COLUMN project_id VARCHAR(64) NOT NULL;
 
--- Remove redundant unique constraint on stable_id before restructuring project PK
+-- Remove unique constraint on stable_id
 ALTER TABLE project DROP CONSTRAINT uq_project_stable_id;
 
 -- Drop INT primary key and column from project
 ALTER TABLE project DROP PRIMARY KEY;
 ALTER TABLE project DROP COLUMN project_id;
 
--- Promote stable_id to be the new project_id PK
+-- Make stable_id the new project_id PK
 ALTER TABLE project RENAME COLUMN stable_id TO project_id;
 ALTER TABLE project ALTER COLUMN project_id VARCHAR(64) NOT NULL;
 ALTER TABLE project ADD PRIMARY KEY (project_id);
