@@ -1,18 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabaseClient';
+import { EolRow } from '../../lib/types';
 
-type Row = {
-  group_id: string;
-  artifact_id: string;
-  version_string: string;
-  cycle_name: string | null;
-  eol_from: string | null;
-  is_eol: boolean;
-  project_name: string;
-};
+interface Props {
+  data: EolRow[];
+}
 
-function StatusBadge({ row }: { row: Row }) {
+function StatusBadge({ row }: { row: EolRow }) {
   if (row.is_eol) {
     return (
       <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-900 text-red-200">
@@ -37,23 +30,8 @@ function StatusBadge({ row }: { row: Row }) {
   );
 }
 
-export default function EolTable() {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase
-      .from('v_eol_approaching')
-      .select('*')
-      .limit(25)
-      .then(({ data }) => {
-        if (data) setRows(data as Row[]);
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) return <p className="text-gray-400 text-sm">Loading...</p>;
-  if (rows.length === 0) {
+export default function EolTable({ data }: Props) {
+  if (data.length === 0) {
     return (
       <p className="text-gray-400 text-sm">
         No EOL-tracked libraries found. EOL data is sourced from endoflife.date — only libraries
@@ -77,7 +55,7 @@ export default function EolTable() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
+            {data.map((row, i) => (
               <tr key={i} className="border-b border-gray-800 hover:bg-gray-800/50">
                 <td className="py-2 pr-4 font-mono text-xs text-gray-200">
                   {row.group_id}:{row.artifact_id}

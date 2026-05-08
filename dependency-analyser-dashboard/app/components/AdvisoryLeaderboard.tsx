@@ -1,17 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, ResponsiveContainer,
 } from 'recharts';
-import { supabase } from '../../lib/supabaseClient';
+import { AdvisoryRawRow } from '../../lib/types';
 
-type ChartRow = {
-  group_id: string;
-  artifact_id: string;
-  cve_count: number;
-  label: string;
-  fullCoords: string;
-};
+type ChartRow = AdvisoryRawRow & { label: string; fullCoords: string };
 
 function AdvisoryTooltip({
   active,
@@ -30,48 +24,35 @@ function AdvisoryTooltip({
   );
 }
 
-export default function AdvisoryLeaderboard() {
-  const [data, setData] = useState<ChartRow[]>([]);
-  const [loading, setLoading] = useState(true);
+interface Props {
+  data: AdvisoryRawRow[];
+  activeLibraryKey: string | null;
+  onLibraryClick: (key: string | null) => void;
+}
 
-  useEffect(() => {
-    supabase
-      .from('v_advisory_leaderboard')
-      .select('*')
-      .limit(20)
-      .then(({ data: rows }) => {
-        if (rows) {
-          setData(
-            rows
-              .map((r: { group_id: string; artifact_id: string; cve_count: unknown }) => ({
-                group_id: r.group_id,
-                artifact_id: r.artifact_id,
-                cve_count: Number(r.cve_count),
-                label:
-                  r.artifact_id.length > 22
-                    ? r.artifact_id.substring(0, 22) + '…'
-                    : r.artifact_id,
-                fullCoords: `${r.group_id}:${r.artifact_id}`,
-              }))
-              .sort((a: ChartRow, b: ChartRow) => b.cve_count - a.cve_count)
-          );
-        }
-        setLoading(false);
-      });
-  }, []);
+export default function AdvisoryLeaderboard({ data, activeLibraryKey, onLibraryClick }: Props) {
+  const processedData = useMemo<ChartRow[]>(() =>
+    data
+      .map(r => ({
+        ...r,
+        label: r.artifact_id.length > 22 ? r.artifact_id.substring(0, 22) + '…' : r.artifact_id,
+        fullCoords: `${r.group_id}:${r.artifact_id}`,
+      }))
+      .sort((a, b) => b.cve_count - a.cve_count),
+    [data]
+  );
 
-  if (loading) return <p className="text-gray-400 text-sm">Loading...</p>;
-  if (data.length === 0) {
+  if (processedData.length === 0) {
     return <p className="text-gray-400 text-sm">No CVEs found in scanned dependencies.</p>;
   }
 
-  const chartHeight = Math.max(250, data.length * 32);
+  const chartHeight = Math.max(250, processedData.length * 32);
 
   return (
     <ResponsiveContainer width="100%" height={chartHeight}>
       <BarChart
         layout="vertical"
-        data={data}
+        data={processedData}
         margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -83,7 +64,22 @@ export default function AdvisoryLeaderboard() {
           tick={{ fill: '#9ca3af', fontSize: 11 }}
         />
         <Tooltip content={<AdvisoryTooltip />} />
-        <Bar dataKey="cve_count" name="CVEs" fill="#ef4444" />
+        <Bar
+          dataKey="cve_count"
+          name="CVEs"
+          cursor="pointer"
+          onClick={(data) => {
+            const entry = data as unknown as ChartRow;
+            onLibraryClick(activeLibraryKey === entry.fullCoords ? null : entry.fullCoords);
+          }}
+        >
+          {processedData.map(entry => (
+            <Cell
+              key={entry.fullCoords}
+              fill={activeLibraryKey && activeLibraryKey !== entry.fullCoords ? '#991b1b' : '#ef4444'}
+            />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );

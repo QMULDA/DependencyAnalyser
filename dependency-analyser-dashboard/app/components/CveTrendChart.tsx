@@ -1,17 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, Brush, ResponsiveContainer,
 } from 'recharts';
-import { supabase } from '../../lib/supabaseClient';
-
-type RawRow = {
-  scan_id: string;
-  scanned_at: string;
-  project_name: string;
-  org_name: string | null;
-  cve_count: number;
-};
+import { CveScanRow } from '../../lib/types';
 
 type ChartPoint = {
   date: string;
@@ -24,35 +15,12 @@ function toDate(ts: string): string {
 }
 
 interface Props {
+  data: CveScanRow[];
   selectedProject: string | null;
   selectedOrg: string | null;
 }
 
-export default function CveTrendChart({ selectedProject, selectedOrg }: Props) {
-  const [rows, setRows] = useState<RawRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase
-      .from('v_cve_count_per_scan')
-      .select('*')
-      .order('scanned_at', { ascending: true })
-      .then(({ data }) => {
-        if (data)
-          setRows(
-            data.map((r: Record<string, unknown>) => ({
-              scan_id: r.scan_id as string,
-              scanned_at: r.scanned_at as string,
-              project_name: r.project_name as string,
-              org_name: r.org_name as string | null,
-              cve_count: Number(r.cve_count),
-            }))
-          );
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) return <p className="text-gray-400 text-sm">Loading...</p>;
+export default function CveTrendChart({ data, selectedProject, selectedOrg }: Props) {
   if (!selectedProject && !selectedOrg) {
     return (
       <p className="text-gray-400 text-sm">
@@ -61,18 +29,16 @@ export default function CveTrendChart({ selectedProject, selectedOrg }: Props) {
     );
   }
 
-  // Project line: one point per scan of the selected project
   const projectByDate = new Map<string, number>();
   if (selectedProject) {
-    for (const row of rows.filter(r => r.project_name === selectedProject)) {
+    for (const row of data.filter(r => r.project_name === selectedProject)) {
       projectByDate.set(toDate(row.scanned_at), row.cve_count);
     }
   }
 
-  // Org line: sum cve_count per day across all projects in the selected org
   const orgByDate = new Map<string, number>();
   if (selectedOrg) {
-    for (const row of rows.filter(r => r.org_name === selectedOrg)) {
+    for (const row of data.filter(r => r.org_name === selectedOrg)) {
       const date = toDate(row.scanned_at);
       orgByDate.set(date, (orgByDate.get(date) ?? 0) + row.cve_count);
     }
@@ -94,7 +60,7 @@ export default function CveTrendChart({ selectedProject, selectedOrg }: Props) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={340}>
       <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
         <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} />
@@ -128,6 +94,7 @@ export default function CveTrendChart({ selectedProject, selectedOrg }: Props) {
             connectNulls={false}
           />
         )}
+        <Brush dataKey="date" height={30} stroke="#4b5563" fill="#111827" travellerWidth={10} />
       </LineChart>
     </ResponsiveContainer>
   );

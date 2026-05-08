@@ -1,18 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, Brush, ResponsiveContainer,
 } from 'recharts';
-import { supabase } from '../../lib/supabaseClient';
-
-type RawRow = {
-  scan_id: string;
-  scanned_at: string;
-  project_name: string;
-  org_name: string | null;
-  relation: string;
-  dep_count: number;
-};
+import { DepCountRow } from '../../lib/types';
 
 type ChartPoint = {
   date: string;
@@ -27,36 +17,12 @@ function toDate(ts: string): string {
 }
 
 interface Props {
+  data: DepCountRow[];
   selectedProject: string | null;
   selectedOrg: string | null;
 }
 
-export default function DepCountTrendChart({ selectedProject, selectedOrg }: Props) {
-  const [rows, setRows] = useState<RawRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase
-      .from('v_dep_count_per_scan')
-      .select('*')
-      .order('scanned_at', { ascending: true })
-      .then(({ data }) => {
-        if (data)
-          setRows(
-            data.map((r: Record<string, unknown>) => ({
-              scan_id: r.scan_id as string,
-              scanned_at: r.scanned_at as string,
-              project_name: r.project_name as string,
-              org_name: r.org_name as string | null,
-              relation: r.relation as string,
-              dep_count: Number(r.dep_count),
-            }))
-          );
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) return <p className="text-gray-400 text-sm">Loading...</p>;
+export default function DepCountTrendChart({ data, selectedProject, selectedOrg }: Props) {
   if (!selectedProject && !selectedOrg) {
     return (
       <p className="text-gray-400 text-sm">
@@ -65,10 +31,9 @@ export default function DepCountTrendChart({ selectedProject, selectedOrg }: Pro
     );
   }
 
-  // Project series: group by scan_id first, then key by date
   const projectScanMap = new Map<string, { scanned_at: string; direct: number; indirect: number }>();
   if (selectedProject) {
-    for (const row of rows.filter(r => r.project_name === selectedProject)) {
+    for (const row of data.filter(r => r.project_name === selectedProject)) {
       if (!projectScanMap.has(row.scan_id)) {
         projectScanMap.set(row.scan_id, { scanned_at: row.scanned_at, direct: 0, indirect: 0 });
       }
@@ -82,10 +47,9 @@ export default function DepCountTrendChart({ selectedProject, selectedOrg }: Pro
     projectByDate.set(toDate(v.scanned_at), { direct: v.direct, indirect: v.indirect });
   }
 
-  // Org series: aggregate all projects in the org per day
   const orgByDate = new Map<string, { direct: number; indirect: number }>();
   if (selectedOrg) {
-    for (const row of rows.filter(r => r.org_name === selectedOrg)) {
+    for (const row of data.filter(r => r.org_name === selectedOrg)) {
       const date = toDate(row.scanned_at);
       if (!orgByDate.has(date)) orgByDate.set(date, { direct: 0, indirect: 0 });
       const entry = orgByDate.get(date)!;
@@ -112,7 +76,7 @@ export default function DepCountTrendChart({ selectedProject, selectedOrg }: Pro
   }
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={340}>
       <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
         <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} />
@@ -169,6 +133,7 @@ export default function DepCountTrendChart({ selectedProject, selectedOrg }: Pro
             />
           </>
         )}
+        <Brush dataKey="date" height={30} stroke="#4b5563" fill="#111827" travellerWidth={10} />
       </LineChart>
     </ResponsiveContainer>
   );

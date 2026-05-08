@@ -1,12 +1,17 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import {
+  Filters, RiskTier,
+  DetailRow, RiskTierRow, ConflictRawRow, AdvisoryRawRow, EolRow, CveScanRow, DepCountRow,
+} from '../lib/types';
 import RiskTierBarChart from './components/RiskTierBarChart';
 import VersionConflictsChart from './components/VersionConflictsChart';
 import CveTrendChart from './components/CveTrendChart';
 import DepCountTrendChart from './components/DepCountTrendChart';
 import EolTable from './components/EolTable';
 import AdvisoryLeaderboard from './components/AdvisoryLeaderboard';
+import DependencyTable from './components/DependencyTable';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -28,25 +33,117 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
+const TIER_CHIP_COLORS: Record<string, string> = {
+  NONE: 'bg-gray-700 text-gray-200',
+  LOW: 'bg-green-900/60 text-green-300',
+  MEDIUM: 'bg-amber-900/60 text-amber-300',
+  HIGH: 'bg-red-900/60 text-red-300',
+};
+
 export default function Home() {
   const [projects, setProjects] = useState<string[]>([]);
   const [orgs, setOrgs] = useState<string[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Raw data from Supabase
+  const [detailRows,    setDetailRows]    = useState<DetailRow[]>([]);
+  const [riskTierData,  setRiskTierData]  = useState<RiskTierRow[]>([]);
+  const [conflictsData, setConflictsData] = useState<ConflictRawRow[]>([]);
+  const [advisoryData,  setAdvisoryData]  = useState<AdvisoryRawRow[]>([]);
+  const [eolData,       setEolData]       = useState<EolRow[]>([]);
+  const [cveTrendData,  setCveTrendData]  = useState<CveScanRow[]>([]);
+  const [depTrendData,  setDepTrendData]  = useState<DepCountRow[]>([]);
+
+  // Cross-filter state
+  const [filters, setFilters] = useState<Filters>({ riskTier: null, libraryKey: null });
 
   useEffect(() => {
     Promise.all([
+      supabase.from('v_dependency_detail').select('*'),
+      supabase.from('v_risk_tier_distribution').select('*'),
+      supabase.from('v_version_conflicts').select('*').order('version_count', { ascending: false }).limit(20),
+      supabase.from('v_advisory_leaderboard').select('*').limit(20),
+      supabase.from('v_eol_approaching').select('*').limit(25),
+      supabase.from('v_cve_count_per_scan').select('*').order('scanned_at', { ascending: true }),
+      supabase.from('v_dep_count_per_scan').select('*').order('scanned_at', { ascending: true }),
       supabase.from('project').select('name'),
       supabase.from('organisation').select('name'),
-    ]).then(([{ data: projData }, { data: orgData }]) => {
-      const projNames: string[] = projData?.map((p: { name: string }) => p.name) ?? [];
-      const orgNames: string[] = orgData?.map((o: { name: string }) => o.name) ?? [];
+    ]).then(([detail, risk, conflicts, advisory, eol, cve, dep, projs, orgs]) => {
+      if (detail.data)    setDetailRows(detail.data as DetailRow[]);
+      if (risk.data)      setRiskTierData(risk.data.map((r: Record<string, unknown>) => ({ risk_tier: r.risk_tier as string, count: Number(r.count) })));
+      if (conflicts.data) setConflictsData(conflicts.data.map((r: Record<string, unknown>) => ({ group_id: r.group_id as string, artifact_id: r.artifact_id as string, version_count: Number(r.version_count) })));
+      if (advisory.data)  setAdvisoryData(advisory.data.map((r: Record<string, unknown>) => ({ group_id: r.group_id as string, artifact_id: r.artifact_id as string, cve_count: Number(r.cve_count) })));
+      if (eol.data)       setEolData(eol.data as EolRow[]);
+      if (cve.data)       setCveTrendData(cve.data.map((r: Record<string, unknown>) => ({ scan_id: r.scan_id as string, scanned_at: r.scanned_at as string, project_name: r.project_name as string, org_name: r.org_name as string | null, cve_count: Number(r.cve_count) })));
+      if (dep.data)       setDepTrendData(dep.data.map((r: Record<string, unknown>) => ({ scan_id: r.scan_id as string, scanned_at: r.scanned_at as string, project_name: r.project_name as string, org_name: r.org_name as string | null, relation: r.relation as string, dep_count: Number(r.dep_count) })));
+
+      const projNames: string[] = projs.data?.map((p: { name: string }) => p.name) ?? [];
+      const orgNames: string[]  = orgs.data?.map((o: { name: string }) => o.name) ?? [];
       setProjects(projNames);
       setOrgs(orgNames);
       if (projNames.length > 0) setSelectedProject(projNames[0]);
-      if (orgNames.length > 0) setSelectedOrg(orgNames[0]);
+      if (orgNames.length > 0)  setSelectedOrg(orgNames[0]);
+      setLoading(false);
     });
   }, []);
+
+  // --- Derived / filtered datasets ---
+
+  // Libraries matching the active riskTier filter (null = no restriction)
+  const librariesForTier = useMemo<Set<string> | null>(() => {
+    if (!filters.riskTier) return null;
+    return new Set(
+      detailRows
+        .filter(r => r.risk_tier === filters.riskTier)
+        .map(r => `${r.group_id}:${r.artifact_id}`)
+    );
+  }, [detailRows, filters.riskTier]);
+
+  const filteredConflicts = useMemo(() =>
+    conflictsData.filter(r => {
+      const key = `${r.group_id}:${r.artifact_id}`;
+      if (librariesForTier && !librariesForTier.has(key)) return false;
+      if (filters.libraryKey && key !== filters.libraryKey) return false;
+      return true;
+    }),
+    [conflictsData, librariesForTier, filters.libraryKey]
+  );
+
+  const filteredAdvisory = useMemo(() =>
+    advisoryData.filter(r => {
+      const key = `${r.group_id}:${r.artifact_id}`;
+      if (librariesForTier && !librariesForTier.has(key)) return false;
+      if (filters.libraryKey && key !== filters.libraryKey) return false;
+      return true;
+    }),
+    [advisoryData, librariesForTier, filters.libraryKey]
+  );
+
+  const filteredEol = useMemo(() => {
+    if (!filters.libraryKey) return eolData;
+    return eolData.filter(r => `${r.group_id}:${r.artifact_id}` === filters.libraryKey);
+  }, [eolData, filters.libraryKey]);
+
+  // Detail table: apply all active filters + project/org selection
+  const filteredDetail = useMemo(() =>
+    detailRows.filter(r => {
+      if (filters.riskTier && r.risk_tier !== filters.riskTier) return false;
+      if (filters.libraryKey && `${r.group_id}:${r.artifact_id}` !== filters.libraryKey) return false;
+      if (selectedProject && r.project_name !== selectedProject) return false;
+      if (selectedOrg && r.org_name !== selectedOrg) return false;
+      return true;
+    }),
+    [detailRows, filters, selectedProject, selectedOrg]
+  );
+
+  // --- Filter helpers ---
+  const setRiskTier   = (t: RiskTier | null) => setFilters(f => ({ ...f, riskTier: t }));
+  const setLibraryKey = (k: string | null)    => setFilters(f => ({ ...f, libraryKey: k }));
+  const clearFilters  = () => setFilters({ riskTier: null, libraryKey: null });
+
+  const hasActiveFilters = filters.riskTier !== null || filters.libraryKey !== null;
 
   return (
     <main className="min-h-screen bg-gray-950 text-gray-100">
@@ -57,14 +154,13 @@ export default function Home() {
         </p>
       </header>
 
-      <div className="px-6 py-6 max-w-screen-xl mx-auto space-y-10">
-        {/* Filter bar — controls the two trend charts */}
+      <div className="px-6 py-6 max-w-screen-xl mx-auto space-y-6">
+
+        {/* Trend filter bar */}
         <div className="flex flex-wrap gap-6 items-center bg-gray-900 rounded-xl px-5 py-4 border border-gray-800">
           <span className="text-sm text-gray-400 font-medium">Trend filters</span>
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-400" htmlFor="proj-select">
-              Project
-            </label>
+            <label className="text-sm text-gray-400" htmlFor="proj-select">Project</label>
             <select
               id="proj-select"
               className="bg-gray-800 border border-gray-600 rounded px-3 py-1 text-sm text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -72,17 +168,11 @@ export default function Home() {
               onChange={e => setSelectedProject(e.target.value || null)}
             >
               {projects.length === 0 && <option value="">No projects exported yet</option>}
-              {projects.map(p => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
+              {projects.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-400" htmlFor="org-select">
-              Organisation
-            </label>
+            <label className="text-sm text-gray-400" htmlFor="org-select">Organisation</label>
             <select
               id="org-select"
               className="bg-gray-800 border border-gray-600 rounded px-3 py-1 text-sm text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -90,53 +180,113 @@ export default function Home() {
               onChange={e => setSelectedOrg(e.target.value || null)}
             >
               {orgs.length === 0 && <option value="">No organisations yet</option>}
-              {orgs.map(o => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
+              {orgs.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
-          <p className="text-gray-500 text-xs">
-            Applies to the trend charts below. Aggregate charts show all data.
-          </p>
+          <p className="text-gray-500 text-xs">Applies to the trend charts below.</p>
         </div>
 
-        {/* Section 1: Version Health */}
-        <Section title="Version Health">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card title="Risk Tier Distribution">
-              <RiskTierBarChart />
-            </Card>
-            <Card title="Libraries with Multiple Versions">
-              <VersionConflictsChart />
-            </Card>
+        {/* Active cross-filter chips */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap gap-2 items-center bg-gray-900/50 rounded-lg px-4 py-2.5 border border-gray-700">
+            <span className="text-xs text-gray-500 mr-1">Active filters:</span>
+            {filters.riskTier && (
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${TIER_CHIP_COLORS[filters.riskTier]}`}>
+                Risk: {filters.riskTier}
+                <button
+                  onClick={() => setRiskTier(null)}
+                  className="hover:opacity-70 leading-none"
+                  aria-label="Clear risk tier filter"
+                >×</button>
+              </span>
+            )}
+            {filters.libraryKey && (
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-900/60 text-blue-300">
+                Library: <span className="font-mono">{filters.libraryKey}</span>
+                <button
+                  onClick={() => setLibraryKey(null)}
+                  className="hover:opacity-70 leading-none"
+                  aria-label="Clear library filter"
+                >×</button>
+              </span>
+            )}
+            <button
+              onClick={clearFilters}
+              className="text-xs text-gray-500 underline hover:text-gray-300 ml-1"
+            >
+              Clear all
+            </button>
           </div>
-        </Section>
+        )}
 
-        {/* Section 2: Trends Over Time */}
-        <Section title="Trends Over Time">
-          <div className="space-y-6">
-            <Card title="CVE Count Over Time">
-              <CveTrendChart selectedProject={selectedProject} selectedOrg={selectedOrg} />
-            </Card>
-            <Card title="Dependency Count Over Time (Direct vs Indirect)">
-              <DepCountTrendChart selectedProject={selectedProject} selectedOrg={selectedOrg} />
-            </Card>
-          </div>
-        </Section>
+        {loading ? (
+          <p className="text-gray-400 text-sm py-8 text-center">Loading dashboard data…</p>
+        ) : (
+          <>
+            {/* Section 1: Version Health */}
+            <Section title="Version Health">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card title="Risk Tier Distribution">
+                  <RiskTierBarChart
+                    data={riskTierData}
+                    activeRiskTier={filters.riskTier}
+                    onRiskTierClick={setRiskTier}
+                  />
+                </Card>
+                <Card title="Libraries with Multiple Versions">
+                  <VersionConflictsChart
+                    data={filteredConflicts}
+                    activeLibraryKey={filters.libraryKey}
+                    onLibraryClick={setLibraryKey}
+                  />
+                </Card>
+              </div>
+            </Section>
 
-        {/* Section 3: EOL & Advisories */}
-        <Section title="EOL & Advisories">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card title="Libraries Approaching End of Life">
-              <EolTable />
-            </Card>
-            <Card title="Top Libraries by CVE Count">
-              <AdvisoryLeaderboard />
-            </Card>
-          </div>
-        </Section>
+            {/* Section 2: Trends Over Time */}
+            <Section title="Trends Over Time">
+              <div className="space-y-6">
+                <Card title="CVE Count Over Time">
+                  <CveTrendChart
+                    data={cveTrendData}
+                    selectedProject={selectedProject}
+                    selectedOrg={selectedOrg}
+                  />
+                </Card>
+                <Card title="Dependency Count Over Time (Direct vs Indirect)">
+                  <DepCountTrendChart
+                    data={depTrendData}
+                    selectedProject={selectedProject}
+                    selectedOrg={selectedOrg}
+                  />
+                </Card>
+              </div>
+            </Section>
+
+            {/* Section 3: EOL & Advisories */}
+            <Section title="EOL & Advisories">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card title="Libraries Approaching End of Life">
+                  <EolTable data={filteredEol} />
+                </Card>
+                <Card title="Top Libraries by CVE Count">
+                  <AdvisoryLeaderboard
+                    data={filteredAdvisory}
+                    activeLibraryKey={filters.libraryKey}
+                    onLibraryClick={setLibraryKey}
+                  />
+                </Card>
+              </div>
+            </Section>
+
+            {/* Section 4: Dependency Detail */}
+            <Section title="Dependency Detail">
+              <Card title="All Dependencies">
+                <DependencyTable data={filteredDetail} />
+              </Card>
+            </Section>
+          </>
+        )}
       </div>
     </main>
   );
