@@ -38,8 +38,8 @@ public class SupabaseExporter {
     public void exportAll(Component parent, String projectId, String orgName) {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
-                String supabaseUrl = SupabaseConfig.SUPABASE_URL;
-                String secretKey = SupabaseConfig.SECRET_KEY;
+                String supabaseUrl = SupabaseConfig.url();
+                String secretKey = SupabaseConfig.secretKey();
 
                 if (supabaseUrl.startsWith("YOUR_") || secretKey.startsWith("YOUR_")) {
                     showError(parent, "Supabase credentials are not configured.\nFill in SupabaseConfig.java with your Project URL and Secret key.");
