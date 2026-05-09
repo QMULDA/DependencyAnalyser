@@ -130,7 +130,7 @@ public class DepsDevClient {
                     Thread.sleep(150);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    return null;
+                    return List.of();
                 }
                 Version version = stub.getVersion(request);
 
@@ -153,14 +153,14 @@ public class DepsDevClient {
                     backoffMs *= 2;
                 } else if (isRateLimited) {
                     java.lang.System.out.println("deps.dev rate limited for " + cacheKey + " after retries, giving up.");
-                    return null;
+                    return List.of();
                 } else {
                     java.lang.System.out.println("deps.dev error for " + cacheKey + ": " + e.getStatus());
-                    return null;
+                    return List.of();
                 }
             }
         }
-        return null;
+        return List.of();
     }
 
     /**
@@ -199,7 +199,7 @@ public class DepsDevClient {
                     if (cve.getAliasesList().isEmpty()) {
                         CvesForDep.add(advisoryKey);
                     } else {
-                    CvesForDep.add(cve.getAliases(0));
+                        CvesForDep.add(cve.getAliases(0));
                     }
                 } catch (StatusRuntimeException e) {
                     Status.Code code = e.getStatus().getCode();
