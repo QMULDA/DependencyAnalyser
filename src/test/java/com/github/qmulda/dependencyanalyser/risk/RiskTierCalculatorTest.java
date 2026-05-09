@@ -59,7 +59,7 @@ public class RiskTierCalculatorTest {
     // Case 5: unparseable version only -> HIGH
     @Test
     public void unparseableVersionOnlyGivesHigh() {
-        ScannedDependency dep = dep("org.springframework", "spring-core", "2.0.0.RELEASE");
+        ScannedDependency dep = dep("org.example", "lib", "not-a-version");
         RiskTierCalculator.assignTiers(Collections.singletonList(dep));
         assertEquals(RiskTier.HIGH, dep.riskTier);
     }

@@ -68,9 +68,13 @@ public class SemverParserTest {
 
     // Invalid inputs
     @Test
-    public void rejectSpringDotReleaseQualifier() {
-        // 2.0.0.RELEASE has 4 dot-separated segments - reject
-        assertFalse(SemverParser.parse("2.0.0.RELEASE").isPresent());
+    public void parseFourSegmentDotQualifier() {
+        // 2.0.0.RELEASE - 4th segment is a non-numeric qualifier; parse as 2.0.0
+        Optional<Semver> result = SemverParser.parse("2.0.0.RELEASE");
+        assertTrue(result.isPresent());
+        assertEquals(2, result.get().major());
+        assertEquals(0, result.get().minor());
+        assertEquals(0, result.get().patch());
     }
 
     @Test
@@ -80,8 +84,13 @@ public class SemverParserTest {
     }
 
     @Test
-    public void rejectSingleSegment() {
-        assertFalse(SemverParser.parse("1").isPresent());
+    public void parseSingleSegmentAsMajorOnly() {
+        // "1" -> 1.0.0
+        Optional<Semver> result = SemverParser.parse("1");
+        assertTrue(result.isPresent());
+        assertEquals(1, result.get().major());
+        assertEquals(0, result.get().minor());
+        assertEquals(0, result.get().patch());
     }
 
     @Test
