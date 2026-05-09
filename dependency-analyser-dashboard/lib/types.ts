@@ -15,6 +15,7 @@ export interface Filters {
 }
 
 export interface DetailRow {
+  version_id:   string;
   group_id:     string;
   artifact_id:  string;
   version_string: string;
