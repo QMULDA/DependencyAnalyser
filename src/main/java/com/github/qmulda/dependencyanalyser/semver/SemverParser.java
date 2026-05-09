@@ -22,19 +22,14 @@ public final class SemverParser {
         if (plusIdx >= 0) s = s.substring(0, plusIdx);
 
         String[] parts = s.split("\\.");
-        if (parts.length < 2) {
-            System.out.println("Rejecting version with less than 2 segments: " + versionString);
-            return Optional.empty();
-        }
-        // More than 3 segments means a non-standard qualifier like 2.0.0.RELEASE - reject
-        if (parts.length > 3) {
-            System.out.println("Rejecting version with more than 3 segments: " + versionString);
-            return Optional.empty();
-        }
+
+        // 4+ segments: Maven qualifiers like 2.0.7.RELEASE / 6.6.29.Final, or 4-part numeric
+        // versions like 10.0.0.1 — use only the first 3 numeric parts.
+        if (parts.length > 3) parts = new String[]{parts[0], parts[1], parts[2]};
 
         try {
             int major = Integer.parseInt(parts[0]);
-            int minor = Integer.parseInt(parts[1]);
+            int minor = parts.length >= 2 ? Integer.parseInt(parts[1]) : 0;
             int patch = parts.length == 3 ? Integer.parseInt(parts[2]) : 0;
 
             // Reject calendar versions (e.g. 2023.0.1 - 2023 > 999).

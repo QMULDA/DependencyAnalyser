@@ -5,6 +5,7 @@ import com.github.qmulda.dependencyanalyser.scan.ScannedDependency;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.project.Project;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -101,7 +102,7 @@ public final class SqlQueryUtils {
                 if (rs.next()) return rs.getString("library_id");
             }
         }
-        String id = UUID.randomUUID().toString();
+        String id = UUID.nameUUIDFromBytes((groupId + ":" + artifactId).getBytes(StandardCharsets.UTF_8)).toString();
         try (PreparedStatement ps = conn.prepareStatement(
                 "INSERT INTO library (library_id, group_id, artifact_id) VALUES (?, ?, ?)")) {
             ps.setString(1, id);
@@ -134,7 +135,7 @@ public final class SqlQueryUtils {
                 }
             }
         }
-        String id = UUID.randomUUID().toString();
+        String id = UUID.nameUUIDFromBytes((libraryId + ":" + versionString).getBytes(StandardCharsets.UTF_8)).toString();
         try (PreparedStatement ps = conn.prepareStatement(
                 "INSERT INTO version (version_id, library_id, version_string, risk_tier, release_cycle_id) VALUES (?, ?, ?, ?, ?)")) {
             ps.setString(1, id);
@@ -170,7 +171,7 @@ public final class SqlQueryUtils {
                 }
             }
         }
-        String id = UUID.randomUUID().toString();
+        String id = UUID.nameUUIDFromBytes((libraryId + ":" + dep.releaseCycle).getBytes(StandardCharsets.UTF_8)).toString();
         try (PreparedStatement ps = conn.prepareStatement(
                 "INSERT INTO release_cycle (release_cycle_id, library_id, cycle_name, eol_from, is_eol) VALUES (?, ?, ?, ?, ?)")) {
             ps.setString(1, id);

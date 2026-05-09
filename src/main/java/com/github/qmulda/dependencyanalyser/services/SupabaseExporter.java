@@ -14,6 +14,7 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 public class SupabaseExporter {
@@ -27,7 +28,7 @@ public class SupabaseExporter {
 
     // Tables with natural unique keys that require upsert on re-export to avoid duplicates
     private static final Set<String> UPSERT_TABLES = Set.of(
-            "organisation", "project", "release_cycle", "advisory", "version_advisory");
+            "organisation", "project", "library", "release_cycle", "advisory", "version", "version_advisory");
 
     private final Project project;
 
@@ -38,8 +39,13 @@ public class SupabaseExporter {
     public void exportAll(Component parent, String projectId, String orgName) {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
-                String supabaseUrl = SupabaseConfig.url();
-                String secretKey = SupabaseConfig.secretKey();
+                Properties cfg = SupabaseConfig.load(project);
+                if (!SupabaseConfig.isConfigured(cfg)) {
+                    showError(parent, "Supabase credentials are not configured.\nCheck local.properties in your project root.");
+                    return;
+                }
+                String supabaseUrl = SupabaseConfig.url(cfg);
+                String secretKey   = SupabaseConfig.secretKey(cfg);
 
                 if (supabaseUrl.startsWith("YOUR_") || secretKey.startsWith("YOUR_")) {
                     showError(parent, "Supabase credentials are not configured.\nFill in local.properties with your Project URL and Secret key.");
